@@ -4,7 +4,7 @@ Leaderboard router — weekly + all-time XP rankings.
 Privacy: returns `display_name` (user.name or first letter + "user_<short_id>")
 instead of email. Users with empty `name` get a generated handle.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -35,7 +35,7 @@ async def leaderboard_weekly(
     Top users by XP earned this week (Mon–Sun, server timezone).
     Always returns the requester's row, even if outside the top.
     """
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     week_start = today - timedelta(days=today.weekday())
 
     # Sum XP per user in the current week.
@@ -58,20 +58,27 @@ async def leaderboard_weekly(
     )
     top_rows = (await db.execute(top_stmt)).all()
 
-    # Ordered list of user IDs to compute requester rank.
-    rank_stmt = (
-        select(weekly_xp_subq.c.uid, weekly_xp_subq.c.week_xp)
-        .order_by(desc(weekly_xp_subq.c.week_xp))
-    )
-    all_rows = (await db.execute(rank_stmt)).all()
+    # Compute the requester's rank with a window function so the DB
+    # returns 1 row instead of streaming every ranked user into memory.
+    ranked_subq = (
+        select(
+            weekly_xp_subq.c.uid.label("uid"),
+            weekly_xp_subq.c.week_xp.label("week_xp"),
+            sqlfunc.row_number()
+            .over(order_by=desc(weekly_xp_subq.c.week_xp))
+            .label("rank"),
+        )
+    ).subquery()
 
-    me_rank: Optional[int] = None
-    me_xp: int = 0
-    for i, row in enumerate(all_rows, start=1):
-        if row.uid == me.id:
-            me_rank = i
-            me_xp = int(row.week_xp)
-            break
+    me_row = (
+        await db.execute(
+            select(ranked_subq.c.rank, ranked_subq.c.week_xp)
+            .where(ranked_subq.c.uid == me.id)
+        )
+    ).first()
+
+    me_rank: Optional[int] = int(me_row.rank) if me_row else None
+    me_xp: int = int(me_row.week_xp) if me_row else 0
 
     return {
         "period": "weekly",
@@ -113,18 +120,24 @@ async def leaderboard_all_time(
     )
     top_rows = (await db.execute(top_stmt)).scalars().all()
 
-    rank_stmt = (
-        select(User.id)
+    # Window function for requester rank — single-row fetch.
+    ranked_subq = (
+        select(
+            User.id.label("uid"),
+            sqlfunc.row_number()
+            .over(order_by=desc(User.xp_total))
+            .label("rank"),
+        )
         .where(User.xp_total > 0)
-        .order_by(desc(User.xp_total))
-    )
-    all_ids = (await db.execute(rank_stmt)).scalars().all()
+    ).subquery()
 
-    me_rank: Optional[int] = None
-    for i, uid in enumerate(all_ids, start=1):
-        if uid == me.id:
-            me_rank = i
-            break
+    me_row = (
+        await db.execute(
+            select(ranked_subq.c.rank).where(ranked_subq.c.uid == me.id)
+        )
+    ).first()
+
+    me_rank: Optional[int] = int(me_row.rank) if me_row else None
 
     return {
         "period": "all-time",

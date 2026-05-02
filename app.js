@@ -622,6 +622,14 @@ function startStreamCanvas(canvas) {
 // LESSON
 // =========================================================
 function initLesson() {
+  // Reset per-lesson state so the Joc tab fetches a fresh game each
+  // time the user enters a different lesson.
+  _miniGameLoaded = false;
+  const mgHost = $('#minigameHost');
+  if (mgHost) {
+    mgHost.innerHTML = '<div class="minigame-empty muted">Wispucci pregătește un joc scurt pentru această lecție…</div>';
+  }
+
   $$('.lesson-card .tab').forEach(tab => {
     if (tab.dataset.bound) return;
     tab.dataset.bound = '1';

@@ -40,7 +40,9 @@ async def get_user_stats(
     Return the entire Statistica page payload in a single call.
     Subject-agnostic: the same shape works for programming, language, math.
     """
-    today = date.today()
+    # Use UTC consistently — server-local `date.today()` would race with
+    # timezone-aware `added_at` / `last_seen_at` columns near midnight.
+    today = datetime.now(timezone.utc).date()
 
     # ─── XP heatmap (last 56 days) ────────────────────────
     start_day = today - timedelta(days=HEATMAP_DAYS - 1)
@@ -85,7 +87,11 @@ async def get_user_stats(
             "source_lesson_id": w.source_lesson_id,
             "added_at": w.added_at.isoformat() if w.added_at else None,
         }
-        for w in sorted(word_rows, key=lambda x: x.added_at or datetime.min, reverse=True)[:24]
+        for w in sorted(
+            word_rows,
+            key=lambda x: x.added_at or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )[:24]
     ]
 
     # ─── Lesson progress + mastery per subject ────────────
@@ -119,7 +125,7 @@ async def get_user_stats(
     recent_activity = []
     for prog, lesson, module in sorted(
         progress_rows,
-        key=lambda t: t[0].last_seen_at or datetime.min,
+        key=lambda t: t[0].last_seen_at or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )[:8]:
         recent_activity.append({
