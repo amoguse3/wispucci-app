@@ -1,24 +1,35 @@
 /* ===========================================================================
-   WISPUCCI — design system v5 (palette: Midnight Violet + Light Gold)
-   bg: Midnight Violet · accents: Light Gold + Lime Cream · line: Fern
+   WISPUCCI — design system v6 (palette: Midnight Violet v2 + Plasma highlight)
+   bg: Midnight Violet (cooler undertone) · accents: Light Gold + Lime Cream
+   highlight: Plasma Violet (peak-end / celebration only)
 =========================================================================== */
 
 :root {
-  /* Backgrounds (palette: Midnight Violet → violet ink) */
-  --bg-base: #210124;       /* Midnight Violet */
-  --bg-card: #2A0930;       /* card surface (slightly lifted) */
-  --bg-elev: #340F3C;       /* elevated surface */
-  --bg-deep: #15001A;       /* deeper than base */
+  /* Backgrounds — violet identity preserved, undertone shifted from
+     red-magenta toward blue-indigo for a more mature/serious vibe. */
+  --bg-base: #1B0928;       /* Midnight Violet v2 */
+  --bg-card: #251440;       /* card surface */
+  --bg-elev: #2D1B4A;       /* elevated surface */
+  --bg-deep: #110525;       /* deeper than base */
 
-  /* Accents (Light Gold / Lime Cream) */
+  /* Accents (Light Gold / Lime Cream) — unchanged warm anchor */
   --accent: #EFDD8D;        /* Light Gold (primary) */
   --accent-soft: #F4FDAF;   /* Lime Cream (secondary, hover, spark) */
   --accent-deep: #C9B86A;   /* deep gold for gradient bottoms */
   --accent-spark: #FFFFD9;  /* brightest highlight */
 
-  /* Accent RGB triplets (for rgba usage) */
+  /* Plasma highlight — used only at peak moments (celebration,
+     orb-celebrating glow, leaderboard rank-up). Provides creative
+     vibrant punch without dominating the palette. */
+  --plasma: #8B5CF6;        /* Plasma Violet */
+  --plasma-soft: #A78BFA;   /* lighter plasma for fades */
+
+  /* Accent + plasma RGB triplets (for rgba usage) */
   --accent-rgb: 239, 221, 141;
   --accent-soft-rgb: 244, 253, 175;
+  --plasma-rgb: 139, 92, 246;
+  --bg-card-rgb: 37, 20, 64;
+  --bg-deep-rgb: 17, 5, 37;
 
   /* Structure (Fern + dark olive) */
   --line: #65743A;          /* Fern (active borders, dividers) */
@@ -45,6 +56,7 @@
   --shadow-1: 0 1px 2px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.25);
   --shadow-2: 0 4px 8px rgba(0,0,0,.45), 0 12px 32px rgba(0,0,0,.35);
   --shadow-glow: 0 0 24px rgba(239,221,141,.25), 0 0 80px rgba(239,221,141,.15);
+  --shadow-plasma: 0 0 32px rgba(139,92,246,.40), 0 0 96px rgba(139,92,246,.20);
 }
 
 /* ===== Reset ===== */
@@ -180,7 +192,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .btn-primary {
   position: relative;
   background: linear-gradient(180deg, var(--accent-soft) 0%, var(--accent) 60%, var(--accent-deep) 100%);
-  color: #210124;
+  color: #1B0928;
   box-shadow: 0 8px 28px rgba(239,221,141,.32), inset 0 1px 0 rgba(255,255,255,.35);
   overflow: hidden;
   isolation: isolate;
@@ -207,7 +219,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   border-radius: 999px;
   color: var(--text-2);
   border: 1px solid var(--line-soft);
-  background: rgba(42,9,48,.4);
+  background: rgba(37,20,64,.4);
   font-size: 14px; font-weight: 500;
   transition: border-color .2s, color .2s, background .2s;
   backdrop-filter: blur(6px);
@@ -369,13 +381,13 @@ body.in-lesson .embers-canvas { opacity: .55; }
   transform: translateZ(0);
 }
 .orb-face .eye {
-  fill: #210124;
+  fill: #1B0928;
   transform-origin: center;
   transform-box: fill-box;
   transition: transform .35s cubic-bezier(.34,1.56,.64,1), fill .25s ease;
 }
 .orb-face .mouth {
-  stroke: #210124;
+  stroke: #1B0928;
   stroke-width: 2.4;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -408,7 +420,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 
 /* Eyebrows — paths above eyes, state-driven */
 .orb-face .brow {
-  stroke: #210124;
+  stroke: #1B0928;
   stroke-width: 2.4;
   stroke-linecap: round;
   fill: none;
@@ -469,9 +481,21 @@ body.in-lesson .embers-canvas { opacity: .55; }
 
 .orb.is-speaking .orb-core { transform: scale(1.015); }
 
-/* Celebrating: calm — no shimmer ring, no glow pulse, just face joy + cheeks + steady glow */
+/* Celebrating: calm + plasma rim — the only place plasma violet bleeds in,
+   to give peak-end moments a creative, vibrant punch without changing
+   the rest of the palette. */
 .orb.is-celebrating .orb-shimmer { opacity: 0; }
-.orb.is-celebrating .orb-glow    { animation: none; opacity: 1; }
+.orb.is-celebrating .orb-glow    {
+  animation: none;
+  opacity: 1;
+  background:
+    radial-gradient(circle, rgba(var(--plasma-rgb),.35) 0%,
+                              rgba(var(--plasma-rgb),.10) 38%,
+                              transparent 65%),
+    radial-gradient(circle, rgba(var(--accent-rgb),.30) 0%,
+                              rgba(var(--accent-rgb),.08) 35%,
+                              transparent 65%);
+}
 .orb.is-celebrating .orb-core    { animation: none; filter: saturate(1.15) brightness(1.06); transform: scale(1.02); }
 .orb.is-celebrating .orb-halo    { animation: none; opacity: .9; }
 .orb.is-celebrating .orb-face .cheek { opacity: 1; }
@@ -600,7 +624,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .card-pick {
   position: relative;
   text-align: left;
-  background: rgba(42,9,48,.6);
+  background: rgba(37,20,64,.6);
   backdrop-filter: blur(10px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -625,7 +649,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   border-color: var(--line);
   transform: translateY(-3px);
   box-shadow: var(--shadow-2), 0 0 0 1px rgba(239,221,141,.15);
-  background: rgba(42,9,48,.85);
+  background: rgba(37,20,64,.85);
 }
 .card-icon {
   font-family: 'JetBrains Mono', monospace;
@@ -648,7 +672,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .pill {
   padding: 10px 16px;
   border-radius: 999px;
-  background: rgba(42,9,48,.6);
+  background: rgba(37,20,64,.6);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   color: var(--text-2);
@@ -667,7 +691,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .topic-card {
   text-align: left;
   position: relative;
-  background: rgba(42,9,48,.6);
+  background: rgba(37,20,64,.6);
   backdrop-filter: blur(10px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -680,7 +704,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .topic-card:hover {
   border-color: var(--line);
   transform: translateY(-2px);
-  background: rgba(42,9,48,.85);
+  background: rgba(37,20,64,.85);
   box-shadow: var(--shadow-2), 0 0 0 1px rgba(239,221,141,.15);
 }
 .topic-card-icon {
@@ -721,7 +745,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   flex: 1;
   height: 48px;
   border-radius: var(--r-2);
-  background: rgba(21,0,26,.5);
+  background: rgba(17,5,37,.5);
   border: 1px dashed var(--line);
   color: var(--text);
   padding: 0 var(--s-4);
@@ -734,7 +758,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   outline: none;
   border-color: var(--accent);
   border-style: solid;
-  background: rgba(21,0,26,.7);
+  background: rgba(17,5,37,.7);
 }
 
 /* ===== Levels ===== */
@@ -745,7 +769,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 }
 .level {
   text-align: left;
-  background: rgba(42,9,48,.6);
+  background: rgba(37,20,64,.6);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -757,7 +781,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .level:hover { border-color: var(--line); transform: translateY(-2px); box-shadow: var(--shadow-2); }
 .level.is-on {
   border-color: var(--accent);
-  background: linear-gradient(180deg, rgba(239,221,141,.10), rgba(42,9,48,.6));
+  background: linear-gradient(180deg, rgba(239,221,141,.10), rgba(37,20,64,.6));
   box-shadow: inset 0 0 0 1px rgba(239,221,141,.25), 0 0 28px rgba(239,221,141,.18);
 }
 .lv-head { display: flex; align-items: baseline; gap: var(--s-3); }
@@ -890,7 +914,7 @@ li.is-done .gen-node-dot {
 /* Card */
 .gen-card {
   position: relative;
-  background: rgba(42,9,48,.55);
+  background: rgba(37,20,64,.55);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -904,7 +928,7 @@ li.is-done .gen-node-dot {
 li.is-active .gen-card {
   opacity: 1;
   border-color: var(--accent);
-  background: linear-gradient(180deg, rgba(239,221,141,.10), rgba(42,9,48,.7));
+  background: linear-gradient(180deg, rgba(239,221,141,.10), rgba(37,20,64,.7));
   transform: translateX(4px);
   box-shadow: 0 12px 32px rgba(239,221,141,.18), inset 0 0 0 1px rgba(239,221,141,.25);
 }
@@ -1027,7 +1051,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   align-items: center;
   height: 64px;
   padding: 0 var(--s-6);
-  background: rgba(42,9,48,.7);
+  background: rgba(37,20,64,.7);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--line-soft);
   position: relative; z-index: 3;
@@ -1053,7 +1077,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   border-radius: 50%;
   display: grid; place-items: center;
   background: linear-gradient(135deg, var(--accent-deep), var(--accent));
-  color: #210124;
+  color: #1B0928;
   font-weight: 700; font-size: 14px;
 }
 
@@ -1063,7 +1087,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   padding: 0 var(--s-6);
   border-bottom: 1px solid var(--line-soft);
   font-size: 14px;
-  background: rgba(42,9,48,.4);
+  background: rgba(37,20,64,.4);
   backdrop-filter: blur(12px);
 }
 .ctxbar-l { display: flex; align-items: center; gap: 10px; }
@@ -1095,7 +1119,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   opacity: .8;
 }
 .orb-bubble {
-  background: rgba(42,9,48,.7);
+  background: rgba(37,20,64,.7);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -1132,7 +1156,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .emotion-btn.is-on { background: rgba(239,221,141,.2); color: var(--accent); }
 
 .lesson-card {
-  background: rgba(42,9,48,.6);
+  background: rgba(37,20,64,.6);
   backdrop-filter: blur(14px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-4);
@@ -1215,7 +1239,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 }
 
 .code {
-  background: rgba(21,0,26,.7);
+  background: rgba(17,5,37,.7);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-2);
   padding: var(--s-4) var(--s-5);
@@ -1241,7 +1265,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .notes-area {
   width: 100%;
   min-height: 320px;
-  background: rgba(21,0,26,.6);
+  background: rgba(17,5,37,.6);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-2);
   padding: var(--s-4);
@@ -1258,7 +1282,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .lesson-progress {
   display: flex; align-items: center; gap: var(--s-4);
   padding: var(--s-4) var(--s-6);
-  background: rgba(42,9,48,.7);
+  background: rgba(37,20,64,.7);
   backdrop-filter: blur(20px);
   border-top: 1px solid var(--line-soft);
 }
@@ -1296,7 +1320,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   gap: 8px;
   padding: 8px 14px;
   background: linear-gradient(180deg, var(--accent-soft), var(--accent));
-  color: #210124;
+  color: #1B0928;
   border-radius: 999px;
   font-size: 13px; font-weight: 600;
   box-shadow: 0 6px 24px rgba(239,221,141,.45);
@@ -1393,9 +1417,9 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 }
 .celebrate-card {
   position: relative;
-  background: rgba(42,9,48,.85);
+  background: rgba(37,20,64,.85);
   backdrop-filter: blur(24px);
-  border: 1px solid var(--line);
+  border: 1px solid rgba(var(--plasma-rgb), .55);
   border-radius: var(--r-4);
   padding: var(--s-7) var(--s-7) var(--s-6);
   text-align: center;
@@ -1404,7 +1428,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   display: flex; flex-direction: column;
   align-items: center;
   gap: var(--s-3);
-  box-shadow: var(--shadow-glow), var(--shadow-2);
+  box-shadow: var(--shadow-plasma), var(--shadow-glow), var(--shadow-2);
   z-index: 2;
 }
 .celebrate h3 {
@@ -1668,7 +1692,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   flex-direction: column;
   gap: 4px;
   padding: var(--s-4) var(--s-5);
-  background: rgba(42,9,48,.55);
+  background: rgba(37,20,64,.55);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -1676,7 +1700,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 }
 .stat-card:hover {
   border-color: rgba(239,221,141,.25);
-  background: rgba(42,9,48,.75);
+  background: rgba(37,20,64,.75);
   transform: translateY(-2px);
 }
 .stat-icon {
@@ -1760,7 +1784,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   text-align: left;
   gap: 4px;
   padding: var(--s-5);
-  background: rgba(42,9,48,.55);
+  background: rgba(37,20,64,.55);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -1771,16 +1795,16 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .home-tile:hover {
   transform: translateY(-3px);
   border-color: var(--line);
-  background: rgba(42,9,48,.85);
+  background: rgba(37,20,64,.85);
   box-shadow: var(--shadow-2), 0 0 0 1px rgba(239,221,141,.18);
 }
 .tile-primary {
-  background: linear-gradient(180deg, rgba(239,221,141,.14) 0%, rgba(42,9,48,.65) 100%);
+  background: linear-gradient(180deg, rgba(239,221,141,.14) 0%, rgba(37,20,64,.65) 100%);
   border-color: rgba(239,221,141,.45);
   box-shadow: 0 0 0 1px rgba(239,221,141,.1), 0 8px 24px rgba(239,221,141,.08);
 }
 .tile-primary:hover {
-  background: linear-gradient(180deg, rgba(239,221,141,.22) 0%, rgba(42,9,48,.7) 100%);
+  background: linear-gradient(180deg, rgba(239,221,141,.22) 0%, rgba(37,20,64,.7) 100%);
   border-color: rgba(239,221,141,.7);
   box-shadow: 0 0 0 1px rgba(239,221,141,.3), 0 14px 32px rgba(239,221,141,.18);
 }
@@ -1834,7 +1858,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .recent-list {
   display: flex;
   flex-direction: column;
-  background: rgba(42,9,48,.45);
+  background: rgba(37,20,64,.45);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -2044,7 +2068,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   padding: var(--s-3) var(--s-4);
   font-size: 14px;
   color: var(--text);
-  background: rgba(42,9,48,.5);
+  background: rgba(37,20,64,.5);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
   font-family: inherit;
@@ -2053,7 +2077,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .vocab-search:focus {
   outline: none;
   border-color: var(--accent);
-  background: rgba(42,9,48,.7);
+  background: rgba(37,20,64,.7);
   box-shadow: 0 0 0 3px rgba(239,221,141,.12);
 }
 .vocab-search::placeholder { color: var(--text-3); }
@@ -2094,7 +2118,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   flex-direction: column;
   gap: var(--s-2);
   padding: var(--s-4) var(--s-5);
-  background: rgba(42,9,48,.55);
+  background: rgba(37,20,64,.55);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -2106,7 +2130,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .vocab-card:hover {
   transform: translateY(-2px);
   border-color: var(--line);
-  background: rgba(42,9,48,.85);
+  background: rgba(37,20,64,.85);
 }
 .vocab-card.is-known { opacity: .65; }
 .vocab-card.is-known .vocab-word { color: var(--text-2); }
@@ -2205,7 +2229,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   gap: var(--s-5);
 }
 .settings-group {
-  background: rgba(42,9,48,.45);
+  background: rgba(37,20,64,.45);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -2456,7 +2480,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   pointer-events: none;
 }
 .toast {
-  background: rgba(42,9,48,.95);
+  background: rgba(37,20,64,.95);
   backdrop-filter: blur(14px);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -2679,9 +2703,14 @@ body.force-focus .aurora-layer { filter: blur(20px) opacity(.5); }
   font-size: .92rem;
 }
 .leaderboard-row.is-me {
-  border-color: var(--gold);
-  background: rgba(239, 221, 141, .1);
-  box-shadow: 0 0 0 2px rgba(239, 221, 141, .15);
+  border-color: rgba(var(--plasma-rgb), .55);
+  background:
+    linear-gradient(135deg,
+      rgba(var(--plasma-rgb), .14) 0%,
+      rgba(239, 221, 141, .10) 100%);
+  box-shadow:
+    0 0 0 2px rgba(var(--plasma-rgb), .25),
+    0 0 24px rgba(var(--plasma-rgb), .18);
 }
 .leaderboard-row .lb-rank {
   font-family: 'Instrument Serif', serif; font-style: italic;
