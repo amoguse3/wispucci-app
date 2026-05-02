@@ -308,6 +308,28 @@ function moveOrbToHost(viewName, opts = {}) {
   });
 }
 
+// Re-anchor orb to its host on scroll/resize WITHOUT animating.
+// The orb-flyer is `position: fixed`, so when the page scrolls the
+// host moves but the orb stays glued to viewport coords — that's why
+// the orb appeared to "drift" over text. We listen on document scroll
+// (capture phase) so we catch scrolls inside any `.view { overflow: auto }`
+// container, and on window resize. rAF-throttled so it stays cheap.
+let __reAnchorRaf = null;
+function scheduleOrbReAnchor() {
+  if (__reAnchorRaf) return;
+  __reAnchorRaf = requestAnimationFrame(() => {
+    __reAnchorRaf = null;
+    if (!state || !state.view) return;
+    const hasOrb = VIEWS_WITH_ORB.has(state.view) || state.view.startsWith('onboarding-');
+    if (!hasOrb) return;
+    // Snap (no tween) — the user explicitly asked that the orb only
+    // animates on view-change, not while scrolling.
+    placeOrbInstantlyAt(state.view);
+  });
+}
+document.addEventListener('scroll', scheduleOrbReAnchor, { capture: true, passive: true });
+window.addEventListener('resize', scheduleOrbReAnchor);
+
 // =========================================================
 // VIEW SWITCHING
 // =========================================================
@@ -1491,7 +1513,7 @@ window.addEventListener('load', () => {
   // Place orb at the active view's host (welcome by default).
   placeOrbInstantlyAt('welcome');
   setOrbState('idle');
-  window.addEventListener('resize', () => placeOrbInstantlyAt(state.view));
+  // (resize listener is registered globally above via scheduleOrbReAnchor)
 
   gsap.from('.welcome-wrap .display',  { y: 24, opacity: 0, duration: .9, delay: .3, ease: 'power3.out' });
   gsap.from('.welcome-wrap .lead',     { y: 14, opacity: 0, duration: .8, delay: .55, ease: 'power3.out' });
