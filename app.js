@@ -741,10 +741,9 @@ function initLesson() {
       if (okA && okB) {
         a.classList.add('is-correct');
         b.classList.add('is-correct');
-        setOrbState('celebrating');
+        orbBurst();
         orbBubble('Exact. Ți-ai prins ideea.');
         showToast('+12 XP · răspuns corect', '✓');
-        setTimeout(() => setOrbState('happy'), 1200);
       } else if (!va || !vb) {
         setOrbState('confused');
         orbBubble('Pune ceva în fiecare câmp — nu e nicio greșeală să ghicim.');
@@ -874,8 +873,7 @@ function renderBugHunter(host, game) {
         span.classList.add('is-correct');
         fb.innerHTML = `<b>Da.</b> Linia ${idx + 1} avea bug. Corectă: <code>${escapeHtml(game.fix || '')}</code>`;
         showToast('+15 XP · bug găsit', '✓');
-        setOrbState('celebrating');
-        setTimeout(() => setOrbState('happy'), 1000);
+        orbBurst();
       } else {
         span.classList.add('is-wrong');
         fb.textContent = 'Hmm, asta e ok. Mai uită-te.';
@@ -935,8 +933,7 @@ function renderCodeAssemble(host, game) {
       fb.textContent = 'Ordine perfectă. Asta-i fluxul.';
       $$('.mg-block', ol).forEach(li => li.classList.add('is-correct'));
       showToast('+18 XP · cod în ordine', '✓');
-      setOrbState('celebrating');
-      setTimeout(() => setOrbState('happy'), 1000);
+      orbBurst();
     } else {
       fb.textContent = 'Aproape — uită-te ce-ar fi rulat primul.';
       setOrbState('confused');
@@ -968,8 +965,7 @@ function renderOutputPredict(host, game) {
         b.classList.add('is-correct');
         fb.textContent = 'Exact. Bine văzut.';
         showToast('+10 XP · output corect', '✓');
-        setOrbState('celebrating');
-        setTimeout(() => setOrbState('happy'), 1000);
+        orbBurst();
       } else {
         b.classList.add('is-wrong');
         fb.textContent = 'Nu, încearcă altă opțiune.';
@@ -1131,13 +1127,73 @@ $('#saveWord')?.addEventListener('click', () => {
 // =========================================================
 let celebrateFx = null;
 
+function prefersReducedMotion() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+// Quick burst — fired on +XP / correct answer in a mini-game.
+// Squash → elastic scale-up → settle, plus a single plasma shockwave ring.
+function orbBurst() {
+  setOrbState('happy');
+  if (prefersReducedMotion()) {
+    setTimeout(() => setOrbState('idle'), 800);
+    return;
+  }
+  theOrb.classList.remove('is-bursting');
+  void theOrb.offsetWidth;          // force reflow → restart animation
+  theOrb.classList.add('is-bursting');
+  spawnShockwave('plasma', 0);
+  setTimeout(() => theOrb.classList.remove('is-bursting'), 700);
+  setTimeout(() => setOrbState('idle'), 1200);
+}
+
+// Mega-boom — full peak-end dopamine spike at lesson completion.
+// Squash → elastic peak → recoil → second peak, plus 3 staggered
+// shockwave rings + 12 ray bursts.
+function orbBoom() {
+  setOrbState('celebrating');
+  if (prefersReducedMotion()) return;
+  theOrb.classList.remove('is-boom');
+  void theOrb.offsetWidth;
+  theOrb.classList.add('is-boom');
+  spawnShockwave('plasma', 0);
+  spawnShockwave('gold',   140);
+  spawnShockwave('plasma', 280);
+  for (let i = 0; i < 12; i++) {
+    spawnRay(i * 30, i % 2 === 0 ? 'gold' : 'plasma', i * 12);
+  }
+  setTimeout(() => theOrb.classList.remove('is-boom'), 1500);
+}
+
+function spawnShockwave(kind = 'plasma', delay = 0) {
+  setTimeout(() => {
+    const ring = document.createElement('div');
+    ring.className = 'orb-shockwave-ring' + (kind === 'gold' ? ' gold' : '');
+    theOrb.appendChild(ring);
+    setTimeout(() => ring.remove(), 1000);
+  }, delay);
+}
+
+function spawnRay(angleDeg, kind = 'gold', delay = 0) {
+  setTimeout(() => {
+    const ray = document.createElement('div');
+    ray.className = 'orb-ray-burst' + (kind === 'plasma' ? ' plasma' : '');
+    ray.style.setProperty('--ray-angle', angleDeg + 'deg');
+    theOrb.appendChild(ray);
+    setTimeout(() => ray.remove(), 800);
+  }, delay);
+}
+
 function celebrate() {
   const overlay = $('#celebrate');
   overlay.classList.add('is-on');
   gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: .25 });
   gsap.fromTo('.celebrate-card', { scale: .92, y: 12, opacity: 0 }, { scale: 1, y: 0, opacity: 1, duration: .6, ease: 'back.out(1.6)' });
   moveOrbToHost('celebrate', { duration: .6 });
-  setOrbState('celebrating');
+  // Trigger the dopamine bang once the orb finishes flying to the
+  // celebrate host (otherwise the burst transform + FLIP transform
+  // fight each other and the orb visibly stutters).
+  setTimeout(orbBoom, 620);
   if (celebrateFx) celebrateFx.stop();
   celebrateFx = startCelebrateFx($('#celebrateFx'));
 }
