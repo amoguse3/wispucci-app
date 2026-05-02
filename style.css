@@ -145,21 +145,36 @@ body.in-lesson .embers-canvas { opacity: .55; }
    progress bar below the viewport. */
 .view-lesson { overflow: hidden; }
 
+/* Course-generation onboarding step: same treatment — ob-head pinned,
+   the gen-stage (module list) scrolls internally so the user can see
+   the bottom of the module list without losing the title. */
+.view-onboarding.view-gen { overflow: hidden; }
+.view-gen .ob-body { min-height: 0; overflow: hidden; flex: 1; }
+.view-gen .gen-stage { flex: 1; min-height: 0; overflow: auto; }
+
 /* Custom slim scrollbar — gold→plasma gradient, on-brand. Applied
    to every element that actually scrolls (views + the lesson tab
    pane that scrolls internally). */
 .view,
-.tab-pane {
+.tab-pane,
+.gen-stage,
+.code {
   scrollbar-width: thin;
   scrollbar-color: rgba(var(--accent-rgb), .28) transparent;
   -ms-overflow-style: auto;
 }
 .view::-webkit-scrollbar,
-.tab-pane::-webkit-scrollbar { width: 8px; height: 8px; }
+.tab-pane::-webkit-scrollbar,
+.gen-stage::-webkit-scrollbar,
+.code::-webkit-scrollbar { width: 8px; height: 8px; }
 .view::-webkit-scrollbar-track,
-.tab-pane::-webkit-scrollbar-track { background: transparent; }
+.tab-pane::-webkit-scrollbar-track,
+.gen-stage::-webkit-scrollbar-track,
+.code::-webkit-scrollbar-track { background: transparent; }
 .view::-webkit-scrollbar-thumb,
-.tab-pane::-webkit-scrollbar-thumb {
+.tab-pane::-webkit-scrollbar-thumb,
+.gen-stage::-webkit-scrollbar-thumb,
+.code::-webkit-scrollbar-thumb {
   background: linear-gradient(
     180deg,
     rgba(var(--plasma-rgb), .35) 0%,
@@ -171,7 +186,9 @@ body.in-lesson .embers-canvas { opacity: .55; }
   transition: background .2s ease;
 }
 .view::-webkit-scrollbar-thumb:hover,
-.tab-pane::-webkit-scrollbar-thumb:hover {
+.tab-pane::-webkit-scrollbar-thumb:hover,
+.gen-stage::-webkit-scrollbar-thumb:hover,
+.code::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(
     180deg,
     rgba(var(--plasma-rgb), .55) 0%,
@@ -180,16 +197,20 @@ body.in-lesson .embers-canvas { opacity: .55; }
   background-clip: padding-box;
 }
 .view::-webkit-scrollbar-corner,
-.tab-pane::-webkit-scrollbar-corner { background: transparent; }
+.tab-pane::-webkit-scrollbar-corner,
+.gen-stage::-webkit-scrollbar-corner,
+.code::-webkit-scrollbar-corner { background: transparent; }
 
 /* ===========================================================================
    TYPOGRAPHY (Instrument Serif italic display + Inter body)
 =========================================================================== */
 
 .display {
-  /* Fluid scaling so the hero feels intentional on every viewport
-     (1280 → 70px, 1536 → 84px, 1920 → 96px capped). */
-  font-size: clamp(40px, 5.5vw, 96px);
+  /* Fluid scaling so the hero feels intentional on every viewport.
+     User feedback: previous range (5.5vw cap 96px) was too big at
+     ~1536 viewport — dropped to 4vw cap 80px so the welcome hero +
+     orb + lead + button all fit in the fold at 100% zoom. */
+  font-size: clamp(34px, 4vw, 80px);
   line-height: 1.05;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -204,7 +225,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   letter-spacing: -.02em;
 }
 .h1 {
-  font-size: clamp(30px, 4.2vw, 68px);
+  font-size: clamp(28px, 3.4vw, 56px);
   font-weight: 600;
   line-height: 1.1;
   letter-spacing: -.01em;
@@ -294,7 +315,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
    needing a 1920+ breakpoint. Caps prevent absurd sizes on 4K.
    Welcome (orb-stage) stays bigger as a hero element; lesson host
    is tighter so it doesn't compete with the reading column. */
-.orb-stage  { width: clamp(240px, 22vw, 420px); height: clamp(240px, 22vw, 420px); margin: 0 auto; aspect-ratio: 1; }
+.orb-stage  { width: clamp(200px, 17vw, 320px); height: clamp(200px, 17vw, 320px); margin: 0 auto; aspect-ratio: 1; }
 .orb-mini-host { width: 56px; height: 56px; }
 .orb-lesson-host { width: clamp(160px, 12vw, 240px); height: clamp(160px, 12vw, 240px); aspect-ratio: 1; }
 .celebrate-orb-host { width: 180px; height: 180px; margin-bottom: var(--s-3); }
@@ -590,14 +611,15 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .welcome-wrap {
   margin: auto;
   text-align: center;
-  padding: var(--s-6) var(--s-5);
+  padding: var(--s-4) var(--s-5);
   display: flex; flex-direction: column; align-items: center;
-  gap: var(--s-5);
-  /* Fluid: hero never feels stuck inside a narrow column. */
+  /* Tighter gap so orb + display + lead + button + footnote all fit
+     in the fold at 100% zoom on a 1080p screen. */
+  gap: var(--s-3);
   max-width: min(1120px, 78vw);
   width: 100%;
 }
-.welcome-wrap .display { margin-top: var(--s-4); }
+.welcome-wrap .display { margin-top: var(--s-2); }
 .welcome-wrap .lead { color: var(--text-2); max-width: 540px; }
 .welcome-wrap .btn { margin-top: var(--s-4); }
 .footnote { color: var(--text-3); font-size: 13px; }
@@ -1265,6 +1287,9 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   min-height: 0;
 }
 .tab-pane.is-active { display: flex; }
+/* Direct children take their natural height inside the scroll —
+   no flex-squish on paragraphs, code blocks, or footers. */
+.tab-pane > * { flex-shrink: 0; }
 
 .lesson-title {
   font-size: clamp(24px, 2.6vw, 44px); font-weight: 600;
@@ -1322,7 +1347,13 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   font-size: 15px;
   color: var(--text);
   line-height: 1.7;
+  /* Scroll horizontally for long lines, never let flex squish the
+     block vertically (it lives inside the lesson tab-pane which is
+     a flex column scroll container). */
   overflow-x: auto;
+  flex-shrink: 0;
+  white-space: pre;
+  margin: 0;
 }
 .code .blank {
   display: inline-block;
@@ -2726,13 +2757,23 @@ body.force-focus .aurora-layer { filter: blur(20px) opacity(.5); }
    AUTH SCREENS — login + signup, used after first generation
    ========================================================= */
 .view-auth { display: none; }
-.view-auth.is-active { display: grid; place-items: center; }
+.view-auth.is-active {
+  display: grid;
+  place-items: center;
+  /* Allow the form to scroll if the user is on a short viewport
+     instead of overflowing the page; align to top so the orb +
+     title sit higher in the fold (user feedback: signup was sitting
+     too low). */
+  align-items: start;
+  padding-top: clamp(16px, 4vh, 56px);
+  overflow: auto;
+}
 .auth-wrap {
   width: min(440px, calc(100% - 32px));
   display: flex; flex-direction: column; align-items: center;
-  text-align: center; gap: 14px;
-  padding: 32px 24px;
-  margin: 60px auto 40px;
+  text-align: center; gap: 10px;
+  padding: 16px 24px 24px;
+  margin: 0 auto;
 }
 .auth-wrap .display { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0; }
 /* Auth-only override: bigger orb host in signup/login views.

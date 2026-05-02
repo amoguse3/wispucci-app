@@ -1184,6 +1184,8 @@ function spawnRay(angleDeg, kind = 'gold', delay = 0) {
   }, delay);
 }
 
+let _orbBoomTimer = null;
+
 function celebrate() {
   const overlay = $('#celebrate');
   overlay.classList.add('is-on');
@@ -1192,8 +1194,12 @@ function celebrate() {
   moveOrbToHost('celebrate', { duration: .6 });
   // Trigger the dopamine bang once the orb finishes flying to the
   // celebrate host (otherwise the burst transform + FLIP transform
-  // fight each other and the orb visibly stutters).
-  setTimeout(orbBoom, 620);
+  // fight each other and the orb visibly stutters). Save the timer
+  // ID so closeCelebrate can cancel it if the user dismisses the
+  // overlay before the boom fires (otherwise the orb would get stuck
+  // in the celebrating state on the lesson view).
+  if (_orbBoomTimer) clearTimeout(_orbBoomTimer);
+  _orbBoomTimer = setTimeout(() => { _orbBoomTimer = null; orbBoom(); }, 620);
   if (celebrateFx) celebrateFx.stop();
   celebrateFx = startCelebrateFx($('#celebrateFx'));
 }
@@ -1203,6 +1209,7 @@ $('#celebrateNext')?.addEventListener('click',  closeCelebrate);
 
 function closeCelebrate() {
   const overlay = $('#celebrate');
+  if (_orbBoomTimer) { clearTimeout(_orbBoomTimer); _orbBoomTimer = null; }
   if (celebrateFx) { celebrateFx.stop(); celebrateFx = null; }
   gsap.to(overlay, { opacity: 0, duration: .25, onComplete: () => {
     overlay.classList.remove('is-on');
