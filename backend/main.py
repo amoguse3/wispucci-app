@@ -41,7 +41,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    # Localhost dev + any *.devinapps.com / *.fly.dev preview domain.
+    allow_origin_regex=(
+        r"^https?://("
+        r"(localhost|127\.0\.0\.1)(:\d+)?"
+        r"|[a-z0-9-]+\.devinapps\.com"
+        r"|[a-z0-9-]+\.fly\.dev"
+        r")$"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
