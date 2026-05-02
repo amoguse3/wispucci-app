@@ -1540,20 +1540,38 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 }
 
 /* ---- Wide-screen (1920+) ---- fill the canvas instead of looking
-   like the layout was designed for a 13" laptop. */
+   like the layout was designed for a 13" laptop. Aggressive scaling:
+   bigger orb, wider lesson-grid, more side-padding on the chrome bars. */
 @media (min-width: 1920px) {
-  .display { font-size: 88px; }
-  .h1 { font-size: 64px; }
-  .lead { font-size: 19px; }
-  .ob-body { max-width: 1360px; }
-  .lesson-grid { max-width: 1620px; grid-template-columns: 400px 1fr; gap: var(--s-7); }
-  .welcome-wrap { max-width: 1040px; gap: var(--s-6); }
-  .orb-stage { width: 360px; height: 360px; }
-  .orb-lesson-host { width: 240px; height: 240px; }
-  .home-body { max-width: 1520px; }
-  .stats-body { max-width: 1520px; }
-  .lesson-title { font-size: 38px; }
-  .lesson-body { font-size: 19px; line-height: 1.7; }
+  .display { font-size: 96px; }
+  .h1 { font-size: 68px; }
+  .h2 { font-size: 36px; }
+  .lead { font-size: 20px; }
+  .ob-body { max-width: 1480px; }
+  .lesson-grid {
+    max-width: 1760px;
+    grid-template-columns: 460px 1fr;
+    gap: var(--s-7);
+    padding: var(--s-7) var(--s-7);
+  }
+  .welcome-wrap { max-width: 1120px; gap: var(--s-6); }
+  .orb-stage { width: 420px; height: 420px; }
+  .orb-lesson-host { width: 280px; height: 280px; }
+  .orb-bubble { font-size: 16px; max-width: 320px; }
+  .home-body { max-width: 1640px; }
+  .stats-body { max-width: 1640px; }
+  .lesson-title { font-size: 44px; }
+  .lesson-body { font-size: 20px; line-height: 1.7; }
+  .tab { font-size: 16px; }
+  .tab-pane { padding: var(--s-7) var(--s-8); }
+  /* Larger side gutters on the chrome bars so they feel framed,
+     not pasted to the edge of the monitor. */
+  .topnav, .ctxbar, .lesson-progress {
+    padding-left:  clamp(48px, 6vw, 160px);
+    padding-right: clamp(48px, 6vw, 160px);
+    height: 72px;
+  }
+  .ctxbar { height: 56px; }
 }
 
 @media (max-width: 900px) {
