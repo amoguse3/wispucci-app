@@ -3,8 +3,6 @@
 > An interactive demo / prototype site for **Wispucci**, an EdTech AI tutoring product
 > for young learners (Gen Z + young Millennials).
 
-🌐 **Live site:** https://orb-demo-xgzecwbw.devinapps.com
-
 This is a single-page static prototype that walks a user through the full product
 flow: Welcome → Subject → Topic → Skill level → Lesson generation → Lesson with
 AI companion (Wispucci orb) → Celebration.

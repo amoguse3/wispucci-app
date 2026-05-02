@@ -1,0 +1,39 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "deepseek/deepseek-v4-pro",
+  "agent": {
+    "boss": {
+      "mode": "primary",
+      "model": "deepseek/deepseek-v4-pro",
+      "description": "DeepSeek V4 — project boss. Code, architecture, quality. Delegates design to @designer.",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "task": "allow"
+      }
+    },
+    "designer": {
+      "mode": "subagent",
+      "model": "anthropic/claude-opus-4-7",
+      "description": "Claude Opus 4.7 — UI/UX design, image prompt generation, visual quality gate. Calls generate-image tool (max 4 retries).",
+      "permission": {
+        "edit": "allow",
+        "bash": "deny",
+        "task": "deny",
+        "webfetch": "deny"
+      }
+    },
+    "entrepreneur": {
+      "mode": "primary",
+      "model": "deepseek/deepseek-v4-pro",
+      "description": "DeepSeek V4 — opportunity finder. Scans internet for market gaps, niches, viable ideas (apps/games/sites).",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "task": "allow",
+        "webfetch": "allow",
+        "websearch": "allow"
+      }
+    }
+  }
+}

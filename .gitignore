@@ -17,3 +17,13 @@ npm-debug.log*
 
 # node, just in case anyone npm-installs anything later
 node_modules/
+
+# Python / backend
+__pycache__/
+*.pyc
+*.pyo
+backend/wispucci.db
+.env
+*.egg-info/
+.venv/
+venv/
