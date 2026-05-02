@@ -288,11 +288,19 @@ function getHostRect(viewName) {
   return $(`[data-orb-host="${viewName}"]`);
 }
 
-function placeOrbInstantlyAt(viewName) {
+function placeOrbInstantlyAt(viewName, _attempt = 0) {
   const host = getHostRect(viewName);
   if (!host) return;
   const r = host.getBoundingClientRect();
-  if (r.width <= 0 || r.height <= 0) return;
+  if (r.width <= 0 || r.height <= 0) {
+    // Host hasn't laid out yet (fonts loading, view just toggled
+    // visible, etc.) — retry on the next frame, capped at ~10 frames
+    // (~160ms) so we never spin forever.
+    if (_attempt < 10) {
+      requestAnimationFrame(() => placeOrbInstantlyAt(viewName, _attempt + 1));
+    }
+    return;
+  }
   gsap.set(orbFlyer, { x: r.left, y: r.top, width: r.width, height: r.height });
 }
 
@@ -306,6 +314,45 @@ function moveOrbToHost(viewName, opts = {}) {
     duration: opts.duration ?? 0.7,
     ease: opts.ease ?? 'power3.inOut',
   });
+}
+
+// Re-anchor orb to its host on scroll/resize WITHOUT animating.
+// The orb-flyer is `position: fixed`, so when the page scrolls the
+// host moves but the orb stays glued to viewport coords — that's why
+// the orb appeared to "drift" over text. We listen on document scroll
+// (capture phase) so we catch scrolls inside any `.view { overflow: auto }`
+// container, and on window resize. rAF-throttled so it stays cheap.
+let __reAnchorRaf = null;
+function scheduleOrbReAnchor() {
+  if (__reAnchorRaf) return;
+  __reAnchorRaf = requestAnimationFrame(() => {
+    __reAnchorRaf = null;
+    if (!state || !state.view) return;
+    const hasOrb = VIEWS_WITH_ORB.has(state.view) || state.view.startsWith('onboarding-');
+    if (!hasOrb) return;
+    // Snap (no tween) — the user explicitly asked that the orb only
+    // animates on view-change, not while scrolling.
+    placeOrbInstantlyAt(state.view);
+  });
+}
+document.addEventListener('scroll', scheduleOrbReAnchor, { capture: true, passive: true });
+window.addEventListener('resize', scheduleOrbReAnchor);
+
+// First-paint defense: when fonts finish loading the page reflows,
+// which used to leave the orb stuck at its pre-font coordinates.
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(scheduleOrbReAnchor).catch(() => {});
+}
+
+// Catch any layout shift (aurora layer, embers canvas resize,
+// font swap, hydration of late-loading content) and re-anchor
+// without animating.
+if (typeof ResizeObserver !== 'undefined') {
+  try {
+    const __orbRO = new ResizeObserver(() => scheduleOrbReAnchor());
+    __orbRO.observe(document.documentElement);
+    if (document.body) __orbRO.observe(document.body);
+  } catch (_e) { /* ignore — fall back to scroll/resize */ }
 }
 
 // =========================================================
@@ -694,10 +741,9 @@ function initLesson() {
       if (okA && okB) {
         a.classList.add('is-correct');
         b.classList.add('is-correct');
-        setOrbState('celebrating');
+        orbBurst();
         orbBubble('Exact. Ți-ai prins ideea.');
         showToast('+12 XP · răspuns corect', '✓');
-        setTimeout(() => setOrbState('happy'), 1200);
       } else if (!va || !vb) {
         setOrbState('confused');
         orbBubble('Pune ceva în fiecare câmp — nu e nicio greșeală să ghicim.');
@@ -827,8 +873,7 @@ function renderBugHunter(host, game) {
         span.classList.add('is-correct');
         fb.innerHTML = `<b>Da.</b> Linia ${idx + 1} avea bug. Corectă: <code>${escapeHtml(game.fix || '')}</code>`;
         showToast('+15 XP · bug găsit', '✓');
-        setOrbState('celebrating');
-        setTimeout(() => setOrbState('happy'), 1000);
+        orbBurst();
       } else {
         span.classList.add('is-wrong');
         fb.textContent = 'Hmm, asta e ok. Mai uită-te.';
@@ -888,8 +933,7 @@ function renderCodeAssemble(host, game) {
       fb.textContent = 'Ordine perfectă. Asta-i fluxul.';
       $$('.mg-block', ol).forEach(li => li.classList.add('is-correct'));
       showToast('+18 XP · cod în ordine', '✓');
-      setOrbState('celebrating');
-      setTimeout(() => setOrbState('happy'), 1000);
+      orbBurst();
     } else {
       fb.textContent = 'Aproape — uită-te ce-ar fi rulat primul.';
       setOrbState('confused');
@@ -921,8 +965,7 @@ function renderOutputPredict(host, game) {
         b.classList.add('is-correct');
         fb.textContent = 'Exact. Bine văzut.';
         showToast('+10 XP · output corect', '✓');
-        setOrbState('celebrating');
-        setTimeout(() => setOrbState('happy'), 1000);
+        orbBurst();
       } else {
         b.classList.add('is-wrong');
         fb.textContent = 'Nu, încearcă altă opțiune.';
@@ -1084,13 +1127,73 @@ $('#saveWord')?.addEventListener('click', () => {
 // =========================================================
 let celebrateFx = null;
 
+function prefersReducedMotion() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+// Quick burst — fired on +XP / correct answer in a mini-game.
+// Squash → elastic scale-up → settle, plus a single plasma shockwave ring.
+function orbBurst() {
+  setOrbState('happy');
+  if (prefersReducedMotion()) {
+    setTimeout(() => setOrbState('idle'), 800);
+    return;
+  }
+  theOrb.classList.remove('is-bursting');
+  void theOrb.offsetWidth;          // force reflow → restart animation
+  theOrb.classList.add('is-bursting');
+  spawnShockwave('plasma', 0);
+  setTimeout(() => theOrb.classList.remove('is-bursting'), 700);
+  setTimeout(() => setOrbState('idle'), 1200);
+}
+
+// Mega-boom — full peak-end dopamine spike at lesson completion.
+// Squash → elastic peak → recoil → second peak, plus 3 staggered
+// shockwave rings + 12 ray bursts.
+function orbBoom() {
+  setOrbState('celebrating');
+  if (prefersReducedMotion()) return;
+  theOrb.classList.remove('is-boom');
+  void theOrb.offsetWidth;
+  theOrb.classList.add('is-boom');
+  spawnShockwave('plasma', 0);
+  spawnShockwave('gold',   140);
+  spawnShockwave('plasma', 280);
+  for (let i = 0; i < 12; i++) {
+    spawnRay(i * 30, i % 2 === 0 ? 'gold' : 'plasma', i * 12);
+  }
+  setTimeout(() => theOrb.classList.remove('is-boom'), 1500);
+}
+
+function spawnShockwave(kind = 'plasma', delay = 0) {
+  setTimeout(() => {
+    const ring = document.createElement('div');
+    ring.className = 'orb-shockwave-ring' + (kind === 'gold' ? ' gold' : '');
+    theOrb.appendChild(ring);
+    setTimeout(() => ring.remove(), 1000);
+  }, delay);
+}
+
+function spawnRay(angleDeg, kind = 'gold', delay = 0) {
+  setTimeout(() => {
+    const ray = document.createElement('div');
+    ray.className = 'orb-ray-burst' + (kind === 'plasma' ? ' plasma' : '');
+    ray.style.setProperty('--ray-angle', angleDeg + 'deg');
+    theOrb.appendChild(ray);
+    setTimeout(() => ray.remove(), 800);
+  }, delay);
+}
+
 function celebrate() {
   const overlay = $('#celebrate');
   overlay.classList.add('is-on');
   gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: .25 });
   gsap.fromTo('.celebrate-card', { scale: .92, y: 12, opacity: 0 }, { scale: 1, y: 0, opacity: 1, duration: .6, ease: 'back.out(1.6)' });
   moveOrbToHost('celebrate', { duration: .6 });
-  setOrbState('celebrating');
+  // Trigger the dopamine bang once the orb finishes flying to the
+  // celebrate host (otherwise the burst transform + FLIP transform
+  // fight each other and the orb visibly stutters).
+  setTimeout(orbBoom, 620);
   if (celebrateFx) celebrateFx.stop();
   celebrateFx = startCelebrateFx($('#celebrateFx'));
 }
@@ -1491,7 +1594,7 @@ window.addEventListener('load', () => {
   // Place orb at the active view's host (welcome by default).
   placeOrbInstantlyAt('welcome');
   setOrbState('idle');
-  window.addEventListener('resize', () => placeOrbInstantlyAt(state.view));
+  // (resize listener is registered globally above via scheduleOrbReAnchor)
 
   gsap.from('.welcome-wrap .display',  { y: 24, opacity: 0, duration: .9, delay: .3, ease: 'power3.out' });
   gsap.from('.welcome-wrap .lead',     { y: 14, opacity: 0, duration: .8, delay: .55, ease: 'power3.out' });
