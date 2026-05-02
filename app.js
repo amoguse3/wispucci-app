@@ -288,11 +288,19 @@ function getHostRect(viewName) {
   return $(`[data-orb-host="${viewName}"]`);
 }
 
-function placeOrbInstantlyAt(viewName) {
+function placeOrbInstantlyAt(viewName, _attempt = 0) {
   const host = getHostRect(viewName);
   if (!host) return;
   const r = host.getBoundingClientRect();
-  if (r.width <= 0 || r.height <= 0) return;
+  if (r.width <= 0 || r.height <= 0) {
+    // Host hasn't laid out yet (fonts loading, view just toggled
+    // visible, etc.) — retry on the next frame, capped at ~10 frames
+    // (~160ms) so we never spin forever.
+    if (_attempt < 10) {
+      requestAnimationFrame(() => placeOrbInstantlyAt(viewName, _attempt + 1));
+    }
+    return;
+  }
   gsap.set(orbFlyer, { x: r.left, y: r.top, width: r.width, height: r.height });
 }
 
@@ -329,6 +337,23 @@ function scheduleOrbReAnchor() {
 }
 document.addEventListener('scroll', scheduleOrbReAnchor, { capture: true, passive: true });
 window.addEventListener('resize', scheduleOrbReAnchor);
+
+// First-paint defense: when fonts finish loading the page reflows,
+// which used to leave the orb stuck at its pre-font coordinates.
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(scheduleOrbReAnchor).catch(() => {});
+}
+
+// Catch any layout shift (aurora layer, embers canvas resize,
+// font swap, hydration of late-loading content) and re-anchor
+// without animating.
+if (typeof ResizeObserver !== 'undefined') {
+  try {
+    const __orbRO = new ResizeObserver(() => scheduleOrbReAnchor());
+    __orbRO.observe(document.documentElement);
+    if (document.body) __orbRO.observe(document.body);
+  } catch (_e) { /* ignore — fall back to scroll/resize */ }
+}
 
 // =========================================================
 // VIEW SWITCHING
