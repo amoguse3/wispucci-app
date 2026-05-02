@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./style.css?v=5" />
+<link rel="stylesheet" href="./style.css?v=7" />
 </head>
 <body>
 
@@ -60,6 +60,149 @@
       <div class="orb-shimmer"></div>
     </div>
   </div>
+
+  <!-- ============== ECRAN HOME — meniu principal pentru utilizator recurent ============== -->
+  <section class="view view-home" data-view="home">
+    <nav class="topnav">
+      <a class="brand" href="#" data-go="home">
+        <div class="brand-orb"><div class="orb orb-deco"><div class="orb-core"><div class="orb-shine"></div></div></div></div>
+        <span>Wispucci</span>
+      </a>
+      <ul class="topnav-links" data-page-nav>
+        <li class="is-active"><a href="#" data-go="home">Acasă</a></li>
+        <li><a href="#" data-go="lesson">Lecții</a></li>
+        <li><a href="#" data-go="vocab">Vocabular</a></li>
+        <li><a href="#" data-go="settings">Settings</a></li>
+      </ul>
+      <div class="topnav-right">
+        <span class="streak">🔥 <span data-streak>3</span></span>
+        <div class="avatar">M</div>
+      </div>
+    </nav>
+
+    <div class="home-body">
+      <section class="home-hero">
+        <div class="home-hero-text">
+          <p class="home-eyebrow">marți · 8:24 dimineața</p>
+          <h1 class="display home-greeting">
+            <em>Bună,</em> Maxim.<br/>
+            <span class="muted-soft"><em>Hai</em> să continuăm.</span>
+          </h1>
+          <p class="lead home-lead">Ai rămas la <em>Funcții cu parametri</em>. Îți mai trebuie <b>~3 minute</b> ca să închei modulul 2.</p>
+
+          <div class="home-continue">
+            <button class="btn btn-primary btn-large" data-go="lesson">
+              <span class="continue-label">
+                <span class="continue-meta">MODULUL 2 · LECȚIA 4</span>
+                <span class="continue-title"><em>Funcții</em> cu parametri</span>
+              </span>
+              <span class="continue-arrow">→</span>
+            </button>
+            <div class="continue-bar">
+              <div class="continue-bar-track"><div class="continue-bar-fill" style="width: 47%"></div></div>
+              <span class="continue-bar-meta">47% · ~3 min rămase</span>
+            </div>
+          </div>
+        </div>
+        <div class="home-hero-orb">
+          <div class="orb-stage" id="homeOrb" data-orb-host="home"></div>
+        </div>
+      </section>
+
+      <section class="home-stats">
+        <div class="stat-card">
+          <span class="stat-icon">🔥</span>
+          <span class="stat-num">3</span>
+          <span class="stat-label">zile streak</span>
+          <span class="stat-sub">cea mai lungă · 12</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">★</span>
+          <span class="stat-num">142</span>
+          <span class="stat-label">XP săptămâna asta</span>
+          <span class="stat-sub">+47 azi</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">▦</span>
+          <span class="stat-num">8<span class="stat-num-sub">/24</span></span>
+          <span class="stat-label">lecții terminate</span>
+          <span class="stat-sub">3 module · 1 deschis</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">A</span>
+          <span class="stat-num" data-vocab-total>38</span>
+          <span class="stat-label">cuvinte vocabular</span>
+          <span class="stat-sub">7 noi azi</span>
+        </div>
+      </section>
+
+      <section class="home-section">
+        <header class="home-section-head">
+          <h2 class="h2"><em>Tot</em> ce ai aici</h2>
+          <p class="muted home-section-sub">șapte tap-uri și știi unde ești.</p>
+        </header>
+        <div class="home-tiles">
+          <button class="home-tile tile-primary" data-go="lesson">
+            <span class="tile-icon">▶</span>
+            <span class="tile-title">Continuă lecția</span>
+            <span class="tile-sub">Modulul 2 · Funcții</span>
+            <span class="tile-go">→</span>
+          </button>
+          <button class="home-tile" data-go="onboarding-1">
+            <span class="tile-icon">+</span>
+            <span class="tile-title">Lecție nouă</span>
+            <span class="tile-sub">alege subiect &amp; nivel</span>
+            <span class="tile-go">→</span>
+          </button>
+          <button class="home-tile" data-go="vocab">
+            <span class="tile-icon">A</span>
+            <span class="tile-title">Vocabular</span>
+            <span class="tile-sub"><span data-vocab-total>38</span> cuvinte salvate</span>
+            <span class="tile-go">→</span>
+          </button>
+          <button class="home-tile" data-go="settings">
+            <span class="tile-icon">⚙</span>
+            <span class="tile-title">Settings</span>
+            <span class="tile-sub">voce · ritm · teme</span>
+            <span class="tile-go">→</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="home-section">
+        <header class="home-section-head">
+          <h2 class="h2"><em>Ultimele</em> lecții</h2>
+          <button class="btn-link" data-go="lesson" data-go-list>vezi toate →</button>
+        </header>
+        <div class="recent-list">
+          <button class="recent-item" data-go="lesson">
+            <span class="recent-num">M2 · L4</span>
+            <span class="recent-title"><em>Funcții</em> cu parametri</span>
+            <span class="recent-meta">3 min · 47% terminat</span>
+            <span class="recent-status status-active">●</span>
+          </button>
+          <button class="recent-item">
+            <span class="recent-num">M2 · L3</span>
+            <span class="recent-title"><em>Funcții</em> fără parametri</span>
+            <span class="recent-meta">4 min · ✓ gata</span>
+            <span class="recent-status status-done">✓</span>
+          </button>
+          <button class="recent-item">
+            <span class="recent-num">M2 · L2</span>
+            <span class="recent-title"><em>Apel</em> și return</span>
+            <span class="recent-meta">5 min · ✓ gata</span>
+            <span class="recent-status status-done">✓</span>
+          </button>
+          <button class="recent-item">
+            <span class="recent-num">M2 · L1</span>
+            <span class="recent-title"><em>Ce e</em> o funcție?</span>
+            <span class="recent-meta">3 min · ✓ gata</span>
+            <span class="recent-status status-done">✓</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  </section>
 
   <!-- ============== ECRAN 2A — ONBOARDING: ce vrei să înveți ============== -->
   <section class="view view-onboarding" data-view="onboarding-1">
@@ -252,18 +395,18 @@
   <!-- ============== ECRAN 3 — LECȚIA ============== -->
   <section class="view view-lesson" data-view="lesson">
     <nav class="topnav">
-      <div class="brand">
+      <a class="brand" href="#" data-go="home">
         <div class="brand-orb"><div class="orb orb-deco"><div class="orb-core"><div class="orb-shine"></div></div></div></div>
         <span>Wispucci</span>
-      </div>
-      <ul class="topnav-links">
-        <li class="is-active">Lecții</li>
-        <li>Dashboard</li>
-        <li>Vocabular</li>
-        <li>Settings</li>
+      </a>
+      <ul class="topnav-links" data-page-nav>
+        <li><a href="#" data-go="home">Acasă</a></li>
+        <li class="is-active"><a href="#" data-go="lesson">Lecții</a></li>
+        <li><a href="#" data-go="vocab">Vocabular</a></li>
+        <li><a href="#" data-go="settings">Settings</a></li>
       </ul>
       <div class="topnav-right">
-        <span class="streak">🔥 3</span>
+        <span class="streak">🔥 <span data-streak>3</span></span>
         <div class="avatar">M</div>
       </div>
     </nav>
@@ -277,8 +420,8 @@
         <span>Lecția 4</span>
       </div>
       <div class="ctxbar-r">
-        <button class="btn-ghost">Mod focus</button>
-        <button class="btn-ghost">Pauză</button>
+        <button class="btn-ghost" id="focusModeBtn">Mod focus</button>
+        <button class="btn-ghost" id="pauseBtn">Pauză</button>
       </div>
     </div>
 
@@ -345,10 +488,11 @@ saluta("Andrei")  # Salut, Andrei!</code></pre>
         <div class="tab-pane" data-pane="practice">
           <h3 class="lesson-title"><em>Scrie</em> o funcție care salută</h3>
           <p class="lesson-body">Completează codul ca <code>saluta("Ana")</code> să afișeze <code>Salut, Ana!</code>.</p>
-          <pre class="code editable"><code>def saluta(<span class="blank">_____</span>):
-    print(f"Salut, {<span class="blank">_____</span>}!")</code></pre>
+          <pre class="code editable"><code>def saluta(<input class="blank-input" id="answerParam" type="text" autocomplete="off" spellcheck="false" placeholder="___" />):
+    print(f"Salut, {<input class="blank-input" id="answerVar" type="text" autocomplete="off" spellcheck="false" placeholder="___" />}!")</code></pre>
+          <p class="practice-hint" id="practiceHint" hidden><em>Indiciu:</em> parametrul are de obicei un nume scurt care descrie ce primește. Pentru un salut, o variabilă bună s-ar numi <code>nume</code>.</p>
           <div class="lesson-foot">
-            <button class="btn-ghost">Indiciu</button>
+            <button class="btn-ghost" id="hintBtn">Indiciu</button>
             <button class="btn btn-primary" id="checkAnswer">Verifică</button>
           </div>
         </div>
@@ -413,20 +557,197 @@ saluta("Andrei")  # Salut, Andrei!</code></pre>
 
   </section>
 
+  <!-- ============== ECRAN VOCABULAR ============== -->
+  <section class="view view-vocab" data-view="vocab">
+    <nav class="topnav">
+      <a class="brand" href="#" data-go="home">
+        <div class="brand-orb"><div class="orb orb-deco"><div class="orb-core"><div class="orb-shine"></div></div></div></div>
+        <span>Wispucci</span>
+      </a>
+      <ul class="topnav-links" data-page-nav>
+        <li><a href="#" data-go="home">Acasă</a></li>
+        <li><a href="#" data-go="lesson">Lecții</a></li>
+        <li class="is-active"><a href="#" data-go="vocab">Vocabular</a></li>
+        <li><a href="#" data-go="settings">Settings</a></li>
+      </ul>
+      <div class="topnav-right">
+        <span class="streak">🔥 <span data-streak>3</span></span>
+        <div class="avatar">M</div>
+      </div>
+    </nav>
+
+    <div class="page-body">
+      <header class="page-head">
+        <div>
+          <h1 class="display page-title"><em>Vocabularul</em> tău</h1>
+          <p class="lead page-lead">Cuvinte salvate din lecții. Apasă pe oricare ca să-l revezi.</p>
+        </div>
+        <div class="page-head-meta">
+          <span class="page-stat">
+            <span class="page-stat-num" data-vocab-total>38</span>
+            <span class="page-stat-label">salvate</span>
+          </span>
+          <span class="page-stat">
+            <span class="page-stat-num">14</span>
+            <span class="page-stat-label">știute</span>
+          </span>
+          <span class="page-stat">
+            <span class="page-stat-num">7</span>
+            <span class="page-stat-label">noi azi</span>
+          </span>
+        </div>
+      </header>
+
+      <div class="vocab-toolbar">
+        <input class="vocab-search" id="vocabSearch" type="text" placeholder="caută un cuvânt sau o idee…" />
+        <div class="vocab-filters" id="vocabFilters">
+          <button class="filter-pill is-on" data-vfilter="all">toate</button>
+          <button class="filter-pill" data-vfilter="new">noi</button>
+          <button class="filter-pill" data-vfilter="known">știute</button>
+          <button class="filter-pill" data-vfilter="review">de reluat</button>
+        </div>
+      </div>
+
+      <div class="vocab-grid" id="vocabGrid">
+        <!-- generated by app.js -->
+      </div>
+
+      <div class="vocab-empty" id="vocabEmpty" hidden>
+        <p class="muted"><em>Nimic potrivit.</em><br/>Încearcă alt cuvânt sau alt filtru.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== ECRAN SETTINGS ============== -->
+  <section class="view view-settings" data-view="settings">
+    <nav class="topnav">
+      <a class="brand" href="#" data-go="home">
+        <div class="brand-orb"><div class="orb orb-deco"><div class="orb-core"><div class="orb-shine"></div></div></div></div>
+        <span>Wispucci</span>
+      </a>
+      <ul class="topnav-links" data-page-nav>
+        <li><a href="#" data-go="home">Acasă</a></li>
+        <li><a href="#" data-go="lesson">Lecții</a></li>
+        <li><a href="#" data-go="vocab">Vocabular</a></li>
+        <li class="is-active"><a href="#" data-go="settings">Settings</a></li>
+      </ul>
+      <div class="topnav-right">
+        <span class="streak">🔥 <span data-streak>3</span></span>
+        <div class="avatar">M</div>
+      </div>
+    </nav>
+
+    <div class="page-body settings-body">
+      <header class="page-head">
+        <div>
+          <h1 class="display page-title"><em>Settings</em></h1>
+          <p class="lead page-lead">Aici reglezi cum se simte Wispucci. Toate se salvează automat.</p>
+        </div>
+      </header>
+
+      <div class="settings-list">
+        <section class="settings-group">
+          <header class="settings-group-head">
+            <h2 class="settings-h2"><em>Mod focus</em></h2>
+            <p class="muted small">Reduce particulele și efectele când citești. Activat automat în lecție.</p>
+          </header>
+          <label class="toggle-row" for="setForceFocus">
+            <span class="toggle-label">Mereu activat (chiar și în afara lecției)</span>
+            <input type="checkbox" id="setForceFocus" class="toggle-input" data-setting="forceFocus" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+          <label class="toggle-row" for="setSilent">
+            <span class="toggle-label">Fără sunete (vocea Wispucci tăcută)</span>
+            <input type="checkbox" id="setSilent" class="toggle-input" data-setting="silent" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </section>
+
+        <section class="settings-group">
+          <header class="settings-group-head">
+            <h2 class="settings-h2"><em>Voce</em> și <em>ritm</em></h2>
+            <p class="muted small">Cum vorbește Wispucci cu tine. Aplicat în următoarea lecție.</p>
+          </header>
+
+          <div class="setting-row">
+            <span class="setting-label">tonul</span>
+            <div class="seg-picker" data-setting="tone">
+              <button data-val="cald" class="is-on">cald</button>
+              <button data-val="prieten">prieten</button>
+              <button data-val="profi">profesionist</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <span class="setting-label">ritm explicații</span>
+            <div class="seg-picker" data-setting="pace">
+              <button data-val="lent">lent</button>
+              <button data-val="normal" class="is-on">normal</button>
+              <button data-val="rapid">rapid</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <span class="setting-label">intensitate embers</span>
+            <input type="range" min="0" max="100" value="60" class="slider" id="setEmbers" data-setting="embersIntensity" />
+            <span class="setting-value" id="embersValue">60%</span>
+          </div>
+        </section>
+
+        <section class="settings-group">
+          <header class="settings-group-head">
+            <h2 class="settings-h2"><em>Cont</em></h2>
+            <p class="muted small">Date care țin de tine.</p>
+          </header>
+          <div class="setting-row simple">
+            <span class="setting-label">email</span>
+            <span class="setting-value">maxim@example.com</span>
+          </div>
+          <div class="setting-row simple">
+            <span class="setting-label">limba</span>
+            <span class="setting-value">Română</span>
+          </div>
+          <div class="setting-row simple">
+            <span class="setting-label">streak</span>
+            <span class="setting-value"><span data-streak>3</span> zile · cea mai lungă 12</span>
+          </div>
+          <div class="setting-row simple">
+            <span class="setting-label">XP total</span>
+            <span class="setting-value" data-xp-total>1248</span>
+          </div>
+        </section>
+
+        <section class="settings-group danger-group">
+          <header class="settings-group-head">
+            <h2 class="settings-h2"><em>Periculoase</em></h2>
+            <p class="muted small">Acțiuni care nu pot fi anulate.</p>
+          </header>
+          <button class="btn-ghost danger-btn" id="resetData">Resetează datele demo</button>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== Toast container ============== -->
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
   <!-- ============== Dev controls (jos-dreapta) ============== -->
   <div class="dev-jump" aria-label="Sări la ecran (demo)">
     <span class="dev-jump-label">demo</span>
-    <button data-go="welcome">1</button>
-    <button data-go="onboarding-1">2</button>
-    <button data-go="onboarding-2">3</button>
-    <button data-go="onboarding-3">4</button>
-    <button data-go="onboarding-4">5</button>
-    <button data-go="lesson">6</button>
+    <button data-go="home" title="Home">⌂</button>
+    <button data-go="welcome" title="Welcome">1</button>
+    <button data-go="onboarding-1" title="Onboarding · subiect">2</button>
+    <button data-go="onboarding-2" title="Onboarding · topic">3</button>
+    <button data-go="onboarding-3" title="Onboarding · nivel">4</button>
+    <button data-go="onboarding-4" title="Generation">5</button>
+    <button data-go="lesson" title="Lecție">6</button>
+    <button data-go="vocab" title="Vocabular">A</button>
+    <button data-go="settings" title="Settings">⚙</button>
     <button id="triggerCelebrate" title="Demo peak-end">★</button>
   </div>
 
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/Flip.min.js"></script>
-<script src="./app.js?v=5"></script>
+<script src="./app.js?v=7"></script>
 </body>
 </html>
