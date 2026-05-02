@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Wispucci — tutor AI care învață cu tine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./style.css?v=5" />
+</head>
+<body>
+
+  <!-- Cinematic background layers -->
+  <canvas class="embers-canvas" id="embersCanvas"></canvas>
+  <div class="aurora-layer"></div>
+  <div class="grain-layer"></div>
+
+  <!-- ============== ECRAN 1 — WELCOME ============== -->
+  <section class="view view-welcome is-active" data-view="welcome">
+    <div class="welcome-wrap">
+      <div class="orb-stage" id="welcomeOrb" data-orb-host="welcome">
+        <!-- Orb element will be moved here / to corner via FLIP -->
+      </div>
+      <h1 class="display"><em>Învățăm</em> ce te interesează.<br/><span class="muted"><em>Nu ce zice</em> manualul.</span></h1>
+      <p class="lead">Un tutor AI care îți face manualul tău, în limbajul tău,<br/>și stă cu tine până înțelegi.</p>
+      <button class="btn btn-primary" data-go="onboarding-1">Începe</button>
+      <p class="footnote">durează 30 de secunde</p>
+    </div>
+  </section>
+
+  <!-- Persistent Orb element (moved between hosts via FLIP) -->
+  <div class="orb-flyer" id="orbFlyer">
+    <div class="orb" id="theOrb">
+      <div class="orb-glow"></div>
+      <div class="orb-halo halo-1"></div>
+      <div class="orb-halo halo-2"></div>
+      <div class="orb-halo halo-3"></div>
+      <div class="orb-core">
+        <div class="orb-shine"></div>
+        <svg class="orb-face" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          <g class="face-brows">
+            <path class="brow brow-l" d="M 30 38 Q 38 35 46 38" fill="none" stroke-linecap="round"/>
+            <path class="brow brow-r" d="M 54 38 Q 62 35 70 38" fill="none" stroke-linecap="round"/>
+          </g>
+          <g class="face-eyes">
+            <ellipse class="eye eye-l" cx="38" cy="50" rx="3.6" ry="5.4"/>
+            <ellipse class="eye eye-r" cx="62" cy="50" rx="3.6" ry="5.4"/>
+            <circle class="eye-shine eye-shine-l" cx="39.5" cy="48" r="1.2"/>
+            <circle class="eye-shine eye-shine-r" cx="63.5" cy="48" r="1.2"/>
+          </g>
+          <path class="mouth" d="M 40 65 Q 50 67 60 65" fill="none" stroke-linecap="round"/>
+          <g class="cheeks">
+            <circle class="cheek cheek-l" cx="30" cy="60" r="3"/>
+            <circle class="cheek cheek-r" cx="70" cy="60" r="3"/>
+          </g>
+        </svg>
+      </div>
+      <div class="orb-orbit"><span class="orbit-dot"></span><span class="orbit-dot"></span><span class="orbit-dot"></span></div>
+      <div class="orb-shimmer"></div>
+    </div>
+  </div>
+
+  <!-- ============== ECRAN 2A — ONBOARDING: ce vrei să înveți ============== -->
+  <section class="view view-onboarding" data-view="onboarding-1">
+    <header class="ob-head">
+      <div class="orb-mini-host" data-orb-host="onboarding-1"></div>
+      <div class="orb-line">
+        <span class="orb-line-name">Wispucci</span>
+        <span class="orb-line-text" data-orb-line>Bun. De unde începem?</span>
+      </div>
+      <div class="ob-progress"><span class="dot is-on"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    </header>
+    <div class="ob-body ob-body-center">
+      <h2 class="h1"><em>Ce</em> vrei să înveți?</h2>
+      <p class="lead muted">Alege un subiect. Putem schimba oricând.</p>
+      <div class="card-grid">
+        <button class="card-pick" data-go="onboarding-2" data-subject="Programare">
+          <div class="card-icon">&lt;/&gt;</div>
+          <div class="card-title">Programare</div>
+          <div class="card-sub">Python · JS · Rust · Go</div>
+          <div class="card-tag">cel mai cerut</div>
+        </button>
+        <button class="card-pick" data-go="onboarding-2" data-subject="Limbă străină">
+          <div class="card-icon">あ</div>
+          <div class="card-title">Limbă străină</div>
+          <div class="card-sub">EN · ES · DE · JP · RO</div>
+          <div class="card-tag">conversație reală</div>
+        </button>
+        <button class="card-pick" data-go="onboarding-2" data-subject="Matematică">
+          <div class="card-icon">∑</div>
+          <div class="card-title">Matematică</div>
+          <div class="card-sub">algebră · analiză · stats</div>
+          <div class="card-tag">de la zero · în ritm</div>
+        </button>
+        <button class="card-pick" data-go="onboarding-2" data-subject="Altceva">
+          <div class="card-icon">+</div>
+          <div class="card-title">Altceva</div>
+          <div class="card-sub">scrii tu, eu construiesc</div>
+          <div class="card-tag">orice subiect</div>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== ECRAN 2B — ONBOARDING: ce anume ============== -->
+  <section class="view view-onboarding" data-view="onboarding-2">
+    <header class="ob-head">
+      <div class="orb-mini-host" data-orb-host="onboarding-2"></div>
+      <div class="orb-line">
+        <span class="orb-line-name">Wispucci</span>
+        <span class="orb-line-text" data-orb-line>Acum ceva mai concret.</span>
+      </div>
+      <div class="ob-progress"><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot"></span><span class="dot"></span></div>
+    </header>
+    <div class="ob-body ob-body-center">
+      <h2 class="h1"><em>Ce anume</em> <span class="accent" id="subjectEcho">programare</span>?</h2>
+      <p class="lead muted">Alege un punct de start. Poți schimba mai târziu.</p>
+      <div class="topic-grid" id="topicGrid">
+        <!-- dynamic topic cards -->
+      </div>
+      <div class="topic-custom">
+        <span class="muted">sau</span>
+        <input class="topic-input" placeholder="scrie ce vrei tu — ex. „ințeleg promise-uri în JS”" />
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== ECRAN 2C — ONBOARDING: nivel ============== -->
+  <section class="view view-onboarding" data-view="onboarding-3">
+    <header class="ob-head">
+      <div class="orb-mini-host" data-orb-host="onboarding-3"></div>
+      <div class="orb-line">
+        <span class="orb-line-name">Wispucci</span>
+        <span class="orb-line-text" data-orb-line>Ultima decizie. Promit.</span>
+      </div>
+      <div class="ob-progress"><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot"></span></div>
+    </header>
+    <div class="ob-body ob-body-center">
+      <h2 class="h1"><em>Cât</em> știi deja?</h2>
+      <p class="lead muted">Nu te subestima. Putem urca repede.</p>
+      <div class="level-grid">
+        <button class="level" data-level="0">
+          <div class="lv-head"><div class="lv-num">0</div><div class="lv-label">Zero</div></div>
+          <div class="lv-sub">de la început — explic chiar și ce e o variabilă</div>
+          <div class="lv-skills"><span>variabile</span><span>print</span><span>operatori</span></div>
+          <div class="lv-bar"><i style="width:10%"></i></div>
+        </button>
+        <button class="level" data-level="1">
+          <div class="lv-head"><div class="lv-num">1</div><div class="lv-label">Începător</div></div>
+          <div class="lv-sub">am atins puțin — știu ce-i un if, dar nu știu când</div>
+          <div class="lv-skills"><span>condiții</span><span>liste</span><span>buclele for</span></div>
+          <div class="lv-bar"><i style="width:35%"></i></div>
+        </button>
+        <button class="level is-on" data-level="2">
+          <div class="lv-head"><div class="lv-num">2</div><div class="lv-label">Mediu</div></div>
+          <div class="lv-sub">știu bazele — vreau să le folosesc bine</div>
+          <div class="lv-skills"><span>funcții</span><span>scope</span><span>OOP basics</span></div>
+          <div class="lv-bar"><i style="width:65%"></i></div>
+        </button>
+        <button class="level" data-level="3">
+          <div class="lv-head"><div class="lv-num">3</div><div class="lv-label">Avansat</div></div>
+          <div class="lv-sub">vreau profunzime — patterns, perf, edge cases</div>
+          <div class="lv-skills"><span>generators</span><span>async</span><span>perf</span></div>
+          <div class="lv-bar"><i style="width:90%"></i></div>
+        </button>
+      </div>
+      <div class="cta-row">
+        <button class="btn btn-primary" data-go="onboarding-4">Construiește lecția</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== ECRAN 2D — ONBOARDING: generation in-progress ============== -->
+  <section class="view view-onboarding view-gen" data-view="onboarding-4">
+    <header class="ob-head">
+      <div class="orb-mini-host" data-orb-host="onboarding-4"></div>
+      <div class="orb-line">
+        <span class="orb-line-name">Wispucci</span>
+        <span class="orb-line-text" data-orb-line>Construiesc. Stai cu mine.</span>
+      </div>
+      <div class="ob-progress"><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot is-on"></span></div>
+    </header>
+    <div class="ob-body gen-body">
+      <canvas class="gen-stream" id="genStream"></canvas>
+      <div class="gen-head">
+        <h2 class="h1"><em>Construiesc</em> lecția ta…</h2>
+        <p class="lead muted">4 module · ~25 min · stau cu tine pas cu pas.</p>
+      </div>
+
+      <div class="gen-stage">
+        <div class="gen-thread"><i id="genThreadFill"></i></div>
+        <ul class="gen-list" id="genList">
+          <li data-i="0">
+            <div class="gen-node"><span class="gen-node-dot"></span></div>
+            <div class="gen-card">
+              <div class="gen-card-head">
+                <span class="gen-num">01</span>
+                <span class="gen-title">Variabile</span>
+                <span class="gen-meta">3 ex · 5 min</span>
+              </div>
+              <div class="gen-tags"><span>tipuri</span><span>scope</span><span>print</span></div>
+              <div class="gen-status"><span class="gen-status-text">așteaptă</span></div>
+            </div>
+          </li>
+          <li data-i="1">
+            <div class="gen-node"><span class="gen-node-dot"></span></div>
+            <div class="gen-card">
+              <div class="gen-card-head">
+                <span class="gen-num">02</span>
+                <span class="gen-title">Funcții</span>
+                <span class="gen-meta">5 ex · 8 min</span>
+              </div>
+              <div class="gen-tags"><span>parametri</span><span>return</span><span>lambda</span></div>
+              <div class="gen-status"><span class="gen-status-text">așteaptă</span></div>
+            </div>
+          </li>
+          <li data-i="2">
+            <div class="gen-node"><span class="gen-node-dot"></span></div>
+            <div class="gen-card">
+              <div class="gen-card-head">
+                <span class="gen-num">03</span>
+                <span class="gen-title">Bucle</span>
+                <span class="gen-meta">4 ex · 6 min</span>
+              </div>
+              <div class="gen-tags"><span>for</span><span>while</span><span>range</span></div>
+              <div class="gen-status"><span class="gen-status-text">așteaptă</span></div>
+            </div>
+          </li>
+          <li data-i="3">
+            <div class="gen-node"><span class="gen-node-dot"></span></div>
+            <div class="gen-card">
+              <div class="gen-card-head">
+                <span class="gen-num">04</span>
+                <span class="gen-title">Liste & dicționare</span>
+                <span class="gen-meta">6 ex · 9 min</span>
+              </div>
+              <div class="gen-tags"><span>indexare</span><span>slicing</span><span>methods</span></div>
+              <div class="gen-status"><span class="gen-status-text">așteaptă</span></div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="gen-progress-row">
+        <div class="gen-bar"><div class="gen-bar-fill" id="genBarFill"></div></div>
+        <div class="gen-pct" id="genPct">0%</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== ECRAN 3 — LECȚIA ============== -->
+  <section class="view view-lesson" data-view="lesson">
+    <nav class="topnav">
+      <div class="brand">
+        <div class="brand-orb"><div class="orb orb-deco"><div class="orb-core"><div class="orb-shine"></div></div></div></div>
+        <span>Wispucci</span>
+      </div>
+      <ul class="topnav-links">
+        <li class="is-active">Lecții</li>
+        <li>Dashboard</li>
+        <li>Vocabular</li>
+        <li>Settings</li>
+      </ul>
+      <div class="topnav-right">
+        <span class="streak">🔥 3</span>
+        <div class="avatar">M</div>
+      </div>
+    </nav>
+
+    <div class="ctxbar">
+      <div class="ctxbar-l">
+        <span class="muted">Modulul 2</span>
+        <span class="dot-sep">·</span>
+        <span>Funcții</span>
+        <span class="dot-sep">·</span>
+        <span>Lecția 4</span>
+      </div>
+      <div class="ctxbar-r">
+        <button class="btn-ghost">Mod focus</button>
+        <button class="btn-ghost">Pauză</button>
+      </div>
+    </div>
+
+    <main class="lesson-grid">
+      <!-- Orb companion -->
+      <aside class="orb-side">
+        <div class="orb-lesson-host" data-orb-host="lesson"></div>
+        <div class="orb-state-label" id="orbState">ascultă</div>
+        <div class="orb-bubble" id="orbBubble">
+          Spune „Explică-mi" dacă ceva nu e clar.
+        </div>
+        <!-- Mini emotion controls for demo -->
+        <div class="emotion-row" aria-label="Demo: stări Wispucci">
+          <button class="emotion-btn" data-emotion="idle"        title="idle">·</button>
+          <button class="emotion-btn" data-emotion="listening"   title="listening">∿</button>
+          <button class="emotion-btn" data-emotion="thinking"    title="thinking">∘</button>
+          <button class="emotion-btn" data-emotion="speaking"    title="speaking">⌇</button>
+          <button class="emotion-btn" data-emotion="happy"       title="happy">↑</button>
+          <button class="emotion-btn" data-emotion="sad"         title="sad">↓</button>
+          <button class="emotion-btn" data-emotion="confused"    title="confused">?</button>
+          <button class="emotion-btn" data-emotion="celebrating" title="celebrating">★</button>
+        </div>
+      </aside>
+
+      <!-- Lesson card -->
+      <article class="lesson-card">
+        <div class="tabs">
+          <button class="tab is-active" data-tab="theory">Teorie</button>
+          <button class="tab" data-tab="practice">Exercițiu</button>
+          <button class="tab" data-tab="notes">Note</button>
+        </div>
+
+        <div class="tab-pane is-active" data-pane="theory">
+          <h3 class="lesson-title"><em>Funcții</em> cu parametri</h3>
+          <p class="lesson-meta">Modulul 2 · 3 min citire</p>
+
+          <p class="lesson-body">
+            O <b>funcție</b> poate primi date pentru a le procesa. Acestea se numesc <b>parametri</b>.
+            Selectează orice cuvânt sau propoziție pe care nu o înțelegi — apare un buton <i>„Explică-mi"</i>.
+          </p>
+
+          <pre class="code"><code>def saluta(nume):
+    print(f"Salut, {nume}!")
+
+saluta("Maria")   # Salut, Maria!
+saluta("Andrei")  # Salut, Andrei!</code></pre>
+
+          <p class="lesson-body">
+            Parametrul <code>nume</code> e ca o cutie pe care o umpli când chemi funcția.
+            La fiecare apel, cutia primește o valoare diferită.
+          </p>
+
+          <p class="lesson-body lesson-note">
+            <span class="note-tag">Notă</span>
+            Parametrul e local funcției. Nu există în afara ei. Asta e <i>scope</i> și ajungem la el în lecția 6.
+          </p>
+
+          <div class="lesson-foot">
+            <button class="btn-ghost" id="prevStep">← Pasul anterior</button>
+            <button class="btn btn-primary" id="nextStep">Pas următor →</button>
+          </div>
+        </div>
+
+        <div class="tab-pane" data-pane="practice">
+          <h3 class="lesson-title"><em>Scrie</em> o funcție care salută</h3>
+          <p class="lesson-body">Completează codul ca <code>saluta("Ana")</code> să afișeze <code>Salut, Ana!</code>.</p>
+          <pre class="code editable"><code>def saluta(<span class="blank">_____</span>):
+    print(f"Salut, {<span class="blank">_____</span>}!")</code></pre>
+          <div class="lesson-foot">
+            <button class="btn-ghost">Indiciu</button>
+            <button class="btn btn-primary" id="checkAnswer">Verifică</button>
+          </div>
+        </div>
+
+        <div class="tab-pane" data-pane="notes">
+          <h3 class="lesson-title"><em>Notele</em> tale</h3>
+          <p class="lesson-body muted">Scrie cu mâna ta ce ai înțeles. Aceste note rămân ale tale.</p>
+          <textarea class="notes-area" placeholder="Funcția primește o valoare prin paranteze. Numele din paranteze e parametrul, valoarea efectivă e argumentul…"></textarea>
+        </div>
+      </article>
+    </main>
+
+    <!-- Progress -->
+    <footer class="lesson-progress">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-meta">
+        <span id="progressPct">47%</span>
+        <span class="muted">din lecție</span>
+      </div>
+    </footer>
+
+    <!-- "Explain me" floating chip -->
+    <div class="explain-chip" id="explainChip">
+      <span>Explică-mi</span>
+      <span class="explain-chip-dot"></span>
+    </div>
+
+    <!-- Inline explanation popover -->
+    <div class="explain-popover" id="explainPopover">
+      <div class="explain-head">
+        <div class="orb-tiny"><div class="orb orb-deco"><div class="orb-core"><div class="orb-shine"></div></div></div></div>
+        <span>Wispucci explică</span>
+        <button class="explain-close" id="explainClose">×</button>
+      </div>
+      <div class="explain-pills">
+        <button class="pill is-on" data-mode="simple">Simplu</button>
+        <button class="pill" data-mode="example">Cu exemplu</button>
+        <button class="pill" data-mode="tech">Tehnic</button>
+      </div>
+      <div class="explain-body" id="explainBody">
+        <span class="muted">…</span>
+      </div>
+      <div class="explain-foot">
+        <button class="btn-ghost" id="saveWord">+ Salvează în vocabular</button>
+      </div>
+    </div>
+
+    <!-- Peak-end celebration overlay -->
+    <div class="celebrate" id="celebrate">
+      <canvas class="celebrate-fx" id="celebrateFx"></canvas>
+      <div class="celebrate-card">
+        <div class="celebrate-orb-host" data-orb-host="celebrate"></div>
+        <h3><em>Lecția</em> gata.</h3>
+        <p class="lead">+47 XP <span class="muted">· streak 4 zile</span></p>
+        <p class="muted small">Mâine continuăm cu listele.</p>
+        <div class="cta-row">
+          <button class="btn-ghost" id="celebrateClose">Închide</button>
+          <button class="btn btn-primary" id="celebrateNext">Vezi rezumatul</button>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ============== Dev controls (jos-dreapta) ============== -->
+  <div class="dev-jump" aria-label="Sări la ecran (demo)">
+    <span class="dev-jump-label">demo</span>
+    <button data-go="welcome">1</button>
+    <button data-go="onboarding-1">2</button>
+    <button data-go="onboarding-2">3</button>
+    <button data-go="onboarding-3">4</button>
+    <button data-go="onboarding-4">5</button>
+    <button data-go="lesson">6</button>
+    <button id="triggerCelebrate" title="Demo peak-end">★</button>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/Flip.min.js"></script>
+<script src="./app.js?v=5"></script>
+</body>
+</html>

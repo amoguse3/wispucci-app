@@ -1,0 +1,19 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# backups left by sed / refactors
+*.bak
+*.orig
+*.rej
+
+# logs
+*.log
+npm-debug.log*
+
+# node, just in case anyone npm-installs anything later
+node_modules/
