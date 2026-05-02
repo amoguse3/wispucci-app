@@ -136,8 +136,32 @@ body.in-lesson .embers-canvas { opacity: .55; }
   display: none;
   overflow: auto;
   z-index: 2;
+  /* Hide scrollbar everywhere by default — only the home menu
+     (`.view-home`) opts in to a visible bar below. Lesson, tutorial
+     (onboarding), auth, etc. keep scrolling functional but render
+     without the bar so the cinematic look isn't broken by Chrome's
+     gray gutter. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.view::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .view.is-active { display: flex; flex-direction: column; }
+
+/* Home (menu) keeps a visible, slim scrollbar because the user
+   asked for the bar to live ONLY here. */
+.view-home {
+  scrollbar-width: thin;
+  -ms-overflow-style: auto;
+}
+.view-home::-webkit-scrollbar { display: block; width: 8px; height: 8px; }
+.view-home::-webkit-scrollbar-track { background: transparent; }
+.view-home::-webkit-scrollbar-thumb {
+  background: rgba(var(--accent-rgb), .25);
+  border-radius: 4px;
+}
+.view-home::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--accent-rgb), .45);
+}
 
 /* ===========================================================================
    TYPOGRAPHY (Instrument Serif italic display + Inter body)
@@ -2658,7 +2682,11 @@ body.force-focus .aurora-layer { filter: blur(20px) opacity(.5); }
   margin: 60px auto 40px;
 }
 .auth-wrap .display { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0; }
-.orb-mini-host {
+/* Auth-only override: bigger orb host in signup/login views.
+   Scoped so it doesn't override the 56px .orb-mini-host used in
+   onboarding `.ob-head` (which would otherwise let the orb glow
+   bleed into the "Bun. De unde începem?" title). */
+.auth-wrap .orb-mini-host {
   width: 120px; height: 120px;
   display: grid; place-items: center;
   margin-bottom: 8px;
