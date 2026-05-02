@@ -31,6 +31,8 @@ from backend.tutor_skills import (
     generate_course,
     generate_exercises,
     generate_explanation,
+    generate_mini_test,
+    generate_minigame,
     stream_explanation,
 )
 
@@ -150,11 +152,20 @@ async def build_lesson(
     """Generate a full module with lessons + exercises from a topic."""
     _check_rate_limit(user.id)
 
+    # Use the tone preset from the user's settings (cald|prieten|profi).
+    user_tone = "cald"
+    try:
+        if isinstance(user.settings, dict):
+            user_tone = str(user.settings.get("tone") or "cald")
+    except Exception:
+        user_tone = "cald"
+
     result = await generate_course(
         subject=body.subject,
         topic=body.topic,
         level=body.level,
         lesson_count=4,
+        tone=user_tone,
     )
 
     # Find next module index
@@ -182,11 +193,14 @@ async def build_lesson(
     db.add(module)
     await db.flush()
 
-    # Create lessons with exercises
+    # Create lessons with exercises + optional mini-game per lesson
     lessons_out = []
     for i, les_data in enumerate(result.get("lessons", [])):
         body_text = les_data.get("body", "")
         exercises_raw = les_data.get("exercises", [])
+        mini_game = les_data.get("mini_game") or None
+        key_terms = les_data.get("key_terms") or []
+        hook = les_data.get("hook") or ""
 
         lesson = Lesson(
             module_id=module.id,
@@ -195,7 +209,10 @@ async def build_lesson(
             body=body_text,
             practice={
                 "type": "mixed",
+                "hook": hook,
+                "key_terms": key_terms,
                 "exercises": exercises_raw,
+                "mini_game": mini_game,
             },
         )
         db.add(lesson)
@@ -206,6 +223,7 @@ async def build_lesson(
             "index": lesson.index,
             "title": lesson.title,
             "exercises_count": len(exercises_raw),
+            "has_mini_game": mini_game is not None,
         })
 
     await db.flush()
@@ -216,6 +234,96 @@ async def build_lesson(
         "level": module.level,
         "lessons": lessons_out,
     }
+
+
+# ─── POST /api/tutor/test/build — mini-test every N lessons ──
+
+
+@router.post("/test/build")
+async def build_mini_test(
+    module_id: str = Query(..., description="Module ID"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Generate a 5-question mixed mini-test from the most recent lessons in a module."""
+    _check_rate_limit(user.id)
+
+    module_row = (
+        await db.execute(select(Module).where(Module.id == module_id))
+    ).scalar_one_or_none()
+    if not module_row:
+        raise HTTPException(404, "Module not found")
+
+    lesson_rows = (
+        await db.execute(
+            select(Lesson)
+            .where(Lesson.module_id == module_id)
+            .order_by(Lesson.index)
+        )
+    ).scalars().all()
+    titles = [l.title for l in lesson_rows]
+
+    user_tone = "cald"
+    try:
+        if isinstance(user.settings, dict):
+            user_tone = str(user.settings.get("tone") or "cald")
+    except Exception:
+        user_tone = "cald"
+
+    test = await generate_mini_test(
+        subject=module_row.subject,
+        topic=module_row.topic,
+        recent_lesson_titles=titles,
+        tone=user_tone,
+    )
+
+    return {
+        "module_id": module_id,
+        "title": test.get("title"),
+        "questions": test.get("questions", []),
+    }
+
+
+# ─── POST /api/tutor/minigame ────────────────────────────
+
+
+@router.post("/minigame")
+async def build_minigame(
+    lesson_id: str = Query(..., description="Lesson ID"),
+    game_type: str = Query("auto", description="bug_hunter | code_assemble | output_predict | word_match | auto"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Generate a single mini-game tied to a lesson."""
+    _check_rate_limit(user.id)
+
+    lesson_row = (
+        await db.execute(select(Lesson).where(Lesson.id == lesson_id))
+    ).scalar_one_or_none()
+    if not lesson_row:
+        raise HTTPException(404, "Lesson not found")
+
+    module_row = (
+        await db.execute(select(Module).where(Module.id == lesson_row.module_id))
+    ).scalar_one_or_none()
+    if not module_row:
+        raise HTTPException(404, "Module not found")
+
+    user_tone = "cald"
+    try:
+        if isinstance(user.settings, dict):
+            user_tone = str(user.settings.get("tone") or "cald")
+    except Exception:
+        user_tone = "cald"
+
+    game = await generate_minigame(
+        subject=module_row.subject,
+        topic=module_row.topic,
+        lesson_title=lesson_row.title,
+        game_type=game_type,
+        tone=user_tone,
+    )
+    return game
 
 
 # ─── POST /api/tutor/exercises ───────────────────────────
