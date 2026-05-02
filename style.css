@@ -136,16 +136,30 @@ body.in-lesson .embers-canvas { opacity: .55; }
   display: none;
   overflow: auto;
   z-index: 2;
-  /* Custom slim scrollbar everywhere — gold-tinted, on-brand,
-     doesn't break the cinematic look but gives users a visual
-     anchor for "there's more below". */
+}
+.view.is-active { display: flex; flex-direction: column; }
+
+/* Lesson view scrolls *internally* (inside the tab-pane) so the
+   topnav, ctxbar, and lesson-progress bar stay pinned. Without this,
+   at 100% browser zoom the lesson content overflows and pushes the
+   progress bar below the viewport. */
+.view-lesson { overflow: hidden; }
+
+/* Custom slim scrollbar — gold→plasma gradient, on-brand. Applied
+   to every element that actually scrolls (views + the lesson tab
+   pane that scrolls internally). */
+.view,
+.tab-pane {
   scrollbar-width: thin;
   scrollbar-color: rgba(var(--accent-rgb), .28) transparent;
   -ms-overflow-style: auto;
 }
-.view::-webkit-scrollbar { width: 8px; height: 8px; }
-.view::-webkit-scrollbar-track { background: transparent; }
-.view::-webkit-scrollbar-thumb {
+.view::-webkit-scrollbar,
+.tab-pane::-webkit-scrollbar { width: 8px; height: 8px; }
+.view::-webkit-scrollbar-track,
+.tab-pane::-webkit-scrollbar-track { background: transparent; }
+.view::-webkit-scrollbar-thumb,
+.tab-pane::-webkit-scrollbar-thumb {
   background: linear-gradient(
     180deg,
     rgba(var(--plasma-rgb), .35) 0%,
@@ -156,7 +170,8 @@ body.in-lesson .embers-canvas { opacity: .55; }
   background-clip: padding-box;
   transition: background .2s ease;
 }
-.view::-webkit-scrollbar-thumb:hover {
+.view::-webkit-scrollbar-thumb:hover,
+.tab-pane::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(
     180deg,
     rgba(var(--plasma-rgb), .55) 0%,
@@ -164,8 +179,8 @@ body.in-lesson .embers-canvas { opacity: .55; }
   );
   background-clip: padding-box;
 }
-.view::-webkit-scrollbar-corner { background: transparent; }
-.view.is-active { display: flex; flex-direction: column; }
+.view::-webkit-scrollbar-corner,
+.tab-pane::-webkit-scrollbar-corner { background: transparent; }
 
 /* ===========================================================================
    TYPOGRAPHY (Instrument Serif italic display + Inter body)
@@ -1146,9 +1161,17 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   width: 100%;
   align-content: start;
   align-items: start;
+  /* min-height: 0 lets the grid shrink to fit available height so
+     .lesson-card can take a max-height: 100% and scroll internally
+     (instead of overflowing the whole .view). */
+  min-height: 0;
+  overflow: hidden;
 }
 .orb-side {
-  position: sticky; top: 0;
+  /* sticky doesn't help anymore (lesson-grid is overflow:hidden, the
+     scroll lives inside the card). orb-side just sits at the top of
+     its grid track and stays put. */
+  position: relative;
   align-self: start;
   display: flex; flex-direction: column; align-items: center;
   gap: var(--s-3);
@@ -1207,12 +1230,17 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   overflow: hidden;
   display: flex; flex-direction: column;
   box-shadow: var(--shadow-2);
+  /* Card height is constrained by the parent grid track so it can
+     scroll internally instead of pushing the progress bar offscreen. */
+  max-height: 100%;
+  min-height: 0;
 }
 
 .tabs {
   display: flex;
   border-bottom: 1px solid var(--line-soft);
   padding: 0 var(--s-5);
+  flex-shrink: 0;
 }
 .tab {
   padding: var(--s-4) var(--s-4);
@@ -1231,6 +1259,10 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   flex: 1;
   flex-direction: column;
   gap: var(--s-4);
+  /* The actual scroll container for lesson content. tabs stay pinned
+     at the top of the card; only the body scrolls. */
+  overflow: auto;
+  min-height: 0;
 }
 .tab-pane.is-active { display: flex; }
 
