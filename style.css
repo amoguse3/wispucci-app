@@ -1,24 +1,35 @@
 /* ===========================================================================
-   WISPUCCI — design system v5 (palette: Midnight Violet + Light Gold)
-   bg: Midnight Violet · accents: Light Gold + Lime Cream · line: Fern
+   WISPUCCI — design system v6 (palette: Midnight Violet v2 + Plasma highlight)
+   bg: Midnight Violet (cooler undertone) · accents: Light Gold + Lime Cream
+   highlight: Plasma Violet (peak-end / celebration only)
 =========================================================================== */
 
 :root {
-  /* Backgrounds (palette: Midnight Violet → violet ink) */
-  --bg-base: #210124;       /* Midnight Violet */
-  --bg-card: #2A0930;       /* card surface (slightly lifted) */
-  --bg-elev: #340F3C;       /* elevated surface */
-  --bg-deep: #15001A;       /* deeper than base */
+  /* Backgrounds — violet identity preserved, undertone shifted from
+     red-magenta toward blue-indigo for a more mature/serious vibe. */
+  --bg-base: #1B0928;       /* Midnight Violet v2 */
+  --bg-card: #251440;       /* card surface */
+  --bg-elev: #2D1B4A;       /* elevated surface */
+  --bg-deep: #110525;       /* deeper than base */
 
-  /* Accents (Light Gold / Lime Cream) */
+  /* Accents (Light Gold / Lime Cream) — unchanged warm anchor */
   --accent: #EFDD8D;        /* Light Gold (primary) */
   --accent-soft: #F4FDAF;   /* Lime Cream (secondary, hover, spark) */
   --accent-deep: #C9B86A;   /* deep gold for gradient bottoms */
   --accent-spark: #FFFFD9;  /* brightest highlight */
 
-  /* Accent RGB triplets (for rgba usage) */
+  /* Plasma highlight — used only at peak moments (celebration,
+     orb-celebrating glow, leaderboard rank-up). Provides creative
+     vibrant punch without dominating the palette. */
+  --plasma: #8B5CF6;        /* Plasma Violet */
+  --plasma-soft: #A78BFA;   /* lighter plasma for fades */
+
+  /* Accent + plasma RGB triplets (for rgba usage) */
   --accent-rgb: 239, 221, 141;
   --accent-soft-rgb: 244, 253, 175;
+  --plasma-rgb: 139, 92, 246;
+  --bg-card-rgb: 37, 20, 64;
+  --bg-deep-rgb: 17, 5, 37;
 
   /* Structure (Fern + dark olive) */
   --line: #65743A;          /* Fern (active borders, dividers) */
@@ -45,6 +56,7 @@
   --shadow-1: 0 1px 2px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.25);
   --shadow-2: 0 4px 8px rgba(0,0,0,.45), 0 12px 32px rgba(0,0,0,.35);
   --shadow-glow: 0 0 24px rgba(239,221,141,.25), 0 0 80px rgba(239,221,141,.15);
+  --shadow-plasma: 0 0 32px rgba(139,92,246,.40), 0 0 96px rgba(139,92,246,.20);
 }
 
 /* ===== Reset ===== */
@@ -124,7 +136,35 @@ body.in-lesson .embers-canvas { opacity: .55; }
   display: none;
   overflow: auto;
   z-index: 2;
+  /* Custom slim scrollbar everywhere — gold-tinted, on-brand,
+     doesn't break the cinematic look but gives users a visual
+     anchor for "there's more below". */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--accent-rgb), .28) transparent;
+  -ms-overflow-style: auto;
 }
+.view::-webkit-scrollbar { width: 8px; height: 8px; }
+.view::-webkit-scrollbar-track { background: transparent; }
+.view::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(var(--plasma-rgb), .35) 0%,
+    rgba(var(--accent-rgb), .35) 100%
+  );
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background .2s ease;
+}
+.view::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(var(--plasma-rgb), .55) 0%,
+    rgba(var(--accent-rgb), .55) 100%
+  );
+  background-clip: padding-box;
+}
+.view::-webkit-scrollbar-corner { background: transparent; }
 .view.is-active { display: flex; flex-direction: column; }
 
 /* ===========================================================================
@@ -132,7 +172,9 @@ body.in-lesson .embers-canvas { opacity: .55; }
 =========================================================================== */
 
 .display {
-  font-size: clamp(40px, 6vw, 64px);
+  /* Fluid scaling so the hero feels intentional on every viewport
+     (1280 → 70px, 1536 → 84px, 1920 → 96px capped). */
+  font-size: clamp(40px, 5.5vw, 96px);
   line-height: 1.05;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -147,7 +189,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   letter-spacing: -.02em;
 }
 .h1 {
-  font-size: clamp(30px, 3.6vw, 44px);
+  font-size: clamp(30px, 4.2vw, 68px);
   font-weight: 600;
   line-height: 1.1;
   letter-spacing: -.01em;
@@ -159,7 +201,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   font-size: 1.18em;
   color: var(--accent-soft);
 }
-.lead { font-size: 18px; color: var(--text); }
+.lead { font-size: clamp(16px, 1.3vw, 20px); color: var(--text); }
 .muted { color: var(--text-3); }
 .accent { color: var(--accent); }
 .small { font-size: 14px; }
@@ -180,7 +222,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .btn-primary {
   position: relative;
   background: linear-gradient(180deg, var(--accent-soft) 0%, var(--accent) 60%, var(--accent-deep) 100%);
-  color: #210124;
+  color: #1B0928;
   box-shadow: 0 8px 28px rgba(239,221,141,.32), inset 0 1px 0 rgba(255,255,255,.35);
   overflow: hidden;
   isolation: isolate;
@@ -207,7 +249,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   border-radius: 999px;
   color: var(--text-2);
   border: 1px solid var(--line-soft);
-  background: rgba(42,9,48,.4);
+  background: rgba(37,20,64,.4);
   font-size: 14px; font-weight: 500;
   transition: border-color .2s, color .2s, background .2s;
   backdrop-filter: blur(6px);
@@ -233,9 +275,13 @@ body.in-lesson .embers-canvas { opacity: .55; }
   position: relative;
   display: block;
 }
-.orb-stage  { width: 280px; height: 280px; margin: 0 auto; }
+/* Fluid orb sizing — the hero scales with the viewport instead of
+   needing a 1920+ breakpoint. Caps prevent absurd sizes on 4K.
+   Welcome (orb-stage) stays bigger as a hero element; lesson host
+   is tighter so it doesn't compete with the reading column. */
+.orb-stage  { width: clamp(240px, 22vw, 420px); height: clamp(240px, 22vw, 420px); margin: 0 auto; aspect-ratio: 1; }
 .orb-mini-host { width: 56px; height: 56px; }
-.orb-lesson-host { width: 200px; height: 200px; }
+.orb-lesson-host { width: clamp(160px, 12vw, 240px); height: clamp(160px, 12vw, 240px); aspect-ratio: 1; }
 .celebrate-orb-host { width: 180px; height: 180px; margin-bottom: var(--s-3); }
 
 .orb {
@@ -369,13 +415,13 @@ body.in-lesson .embers-canvas { opacity: .55; }
   transform: translateZ(0);
 }
 .orb-face .eye {
-  fill: #210124;
+  fill: #1B0928;
   transform-origin: center;
   transform-box: fill-box;
   transition: transform .35s cubic-bezier(.34,1.56,.64,1), fill .25s ease;
 }
 .orb-face .mouth {
-  stroke: #210124;
+  stroke: #1B0928;
   stroke-width: 2.4;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -408,7 +454,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 
 /* Eyebrows — paths above eyes, state-driven */
 .orb-face .brow {
-  stroke: #210124;
+  stroke: #1B0928;
   stroke-width: 2.4;
   stroke-linecap: round;
   fill: none;
@@ -469,9 +515,21 @@ body.in-lesson .embers-canvas { opacity: .55; }
 
 .orb.is-speaking .orb-core { transform: scale(1.015); }
 
-/* Celebrating: calm — no shimmer ring, no glow pulse, just face joy + cheeks + steady glow */
+/* Celebrating: calm + plasma rim — the only place plasma violet bleeds in,
+   to give peak-end moments a creative, vibrant punch without changing
+   the rest of the palette. */
 .orb.is-celebrating .orb-shimmer { opacity: 0; }
-.orb.is-celebrating .orb-glow    { animation: none; opacity: 1; }
+.orb.is-celebrating .orb-glow    {
+  animation: none;
+  opacity: 1;
+  background:
+    radial-gradient(circle, rgba(var(--plasma-rgb),.35) 0%,
+                              rgba(var(--plasma-rgb),.10) 38%,
+                              transparent 65%),
+    radial-gradient(circle, rgba(var(--accent-rgb),.30) 0%,
+                              rgba(var(--accent-rgb),.08) 35%,
+                              transparent 65%);
+}
 .orb.is-celebrating .orb-core    { animation: none; filter: saturate(1.15) brightness(1.06); transform: scale(1.02); }
 .orb.is-celebrating .orb-halo    { animation: none; opacity: .9; }
 .orb.is-celebrating .orb-face .cheek { opacity: 1; }
@@ -520,9 +578,10 @@ body.in-lesson .embers-canvas { opacity: .55; }
   padding: var(--s-6) var(--s-5);
   display: flex; flex-direction: column; align-items: center;
   gap: var(--s-5);
-  max-width: 720px;
+  /* Fluid: hero never feels stuck inside a narrow column. */
+  max-width: min(1120px, 78vw);
+  width: 100%;
 }
-.orb-stage { width: 280px; height: 280px; }
 .welcome-wrap .display { margin-top: var(--s-4); }
 .welcome-wrap .lead { color: var(--text-2); max-width: 540px; }
 .welcome-wrap .btn { margin-top: var(--s-4); }
@@ -600,7 +659,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .card-pick {
   position: relative;
   text-align: left;
-  background: rgba(42,9,48,.6);
+  background: rgba(37,20,64,.6);
   backdrop-filter: blur(10px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -625,7 +684,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   border-color: var(--line);
   transform: translateY(-3px);
   box-shadow: var(--shadow-2), 0 0 0 1px rgba(239,221,141,.15);
-  background: rgba(42,9,48,.85);
+  background: rgba(37,20,64,.85);
 }
 .card-icon {
   font-family: 'JetBrains Mono', monospace;
@@ -648,7 +707,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .pill {
   padding: 10px 16px;
   border-radius: 999px;
-  background: rgba(42,9,48,.6);
+  background: rgba(37,20,64,.6);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   color: var(--text-2);
@@ -667,7 +726,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .topic-card {
   text-align: left;
   position: relative;
-  background: rgba(42,9,48,.6);
+  background: rgba(37,20,64,.6);
   backdrop-filter: blur(10px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -680,7 +739,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .topic-card:hover {
   border-color: var(--line);
   transform: translateY(-2px);
-  background: rgba(42,9,48,.85);
+  background: rgba(37,20,64,.85);
   box-shadow: var(--shadow-2), 0 0 0 1px rgba(239,221,141,.15);
 }
 .topic-card-icon {
@@ -721,7 +780,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   flex: 1;
   height: 48px;
   border-radius: var(--r-2);
-  background: rgba(21,0,26,.5);
+  background: rgba(17,5,37,.5);
   border: 1px dashed var(--line);
   color: var(--text);
   padding: 0 var(--s-4);
@@ -734,7 +793,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
   outline: none;
   border-color: var(--accent);
   border-style: solid;
-  background: rgba(21,0,26,.7);
+  background: rgba(17,5,37,.7);
 }
 
 /* ===== Levels ===== */
@@ -745,7 +804,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 }
 .level {
   text-align: left;
-  background: rgba(42,9,48,.6);
+  background: rgba(37,20,64,.6);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -757,7 +816,7 @@ body.in-lesson .embers-canvas { opacity: .55; }
 .level:hover { border-color: var(--line); transform: translateY(-2px); box-shadow: var(--shadow-2); }
 .level.is-on {
   border-color: var(--accent);
-  background: linear-gradient(180deg, rgba(239,221,141,.10), rgba(42,9,48,.6));
+  background: linear-gradient(180deg, rgba(239,221,141,.10), rgba(37,20,64,.6));
   box-shadow: inset 0 0 0 1px rgba(239,221,141,.25), 0 0 28px rgba(239,221,141,.18);
 }
 .lv-head { display: flex; align-items: baseline; gap: var(--s-3); }
@@ -890,7 +949,7 @@ li.is-done .gen-node-dot {
 /* Card */
 .gen-card {
   position: relative;
-  background: rgba(42,9,48,.55);
+  background: rgba(37,20,64,.55);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -904,7 +963,7 @@ li.is-done .gen-node-dot {
 li.is-active .gen-card {
   opacity: 1;
   border-color: var(--accent);
-  background: linear-gradient(180deg, rgba(239,221,141,.10), rgba(42,9,48,.7));
+  background: linear-gradient(180deg, rgba(239,221,141,.10), rgba(37,20,64,.7));
   transform: translateX(4px);
   box-shadow: 0 12px 32px rgba(239,221,141,.18), inset 0 0 0 1px rgba(239,221,141,.25);
 }
@@ -1025,9 +1084,11 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  height: 64px;
-  padding: 0 var(--s-6);
-  background: rgba(42,9,48,.7);
+  height: clamp(60px, 4vw, 76px);
+  /* Fluid side gutters: 24px on phones, scales up to 160px on 4K so
+     the chrome reads as framed, not pasted to the monitor edge. */
+  padding: 0 clamp(20px, 6vw, 160px);
+  background: rgba(37,20,64,.7);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--line-soft);
   position: relative; z-index: 3;
@@ -1053,17 +1114,17 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   border-radius: 50%;
   display: grid; place-items: center;
   background: linear-gradient(135deg, var(--accent-deep), var(--accent));
-  color: #210124;
+  color: #1B0928;
   font-weight: 700; font-size: 14px;
 }
 
 .ctxbar {
   display: flex; align-items: center; justify-content: space-between;
-  height: 48px;
-  padding: 0 var(--s-6);
+  height: clamp(44px, 3vw, 56px);
+  padding: 0 clamp(20px, 6vw, 160px);
   border-bottom: 1px solid var(--line-soft);
   font-size: 14px;
-  background: rgba(42,9,48,.4);
+  background: rgba(37,20,64,.4);
   backdrop-filter: blur(12px);
 }
 .ctxbar-l { display: flex; align-items: center; gap: 10px; }
@@ -1073,9 +1134,16 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .lesson-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: var(--s-6);
-  padding: var(--s-6);
+  /* Fluid: orb-side track scales with viewport, lesson content takes
+     the rest. Tightened after user feedback that the card was too
+     wide (filled the whole viewport). Now caps at 1280px so the
+     reading column stays comfortable (~85ch at 18-20px). */
+  grid-template-columns: clamp(240px, 18vw, 380px) 1fr;
+  gap: clamp(20px, 2vw, 48px);
+  padding: clamp(20px, 2vw, 48px);
+  max-width: min(1280px, 82vw);
+  margin: 0 auto;
+  width: 100%;
   align-content: start;
   align-items: start;
 }
@@ -1095,7 +1163,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   opacity: .8;
 }
 .orb-bubble {
-  background: rgba(42,9,48,.7);
+  background: rgba(37,20,64,.7);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -1132,7 +1200,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .emotion-btn.is-on { background: rgba(239,221,141,.2); color: var(--accent); }
 
 .lesson-card {
-  background: rgba(42,9,48,.6);
+  background: rgba(37,20,64,.6);
   backdrop-filter: blur(14px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-4);
@@ -1167,7 +1235,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .tab-pane.is-active { display: flex; }
 
 .lesson-title {
-  font-size: 32px; font-weight: 600;
+  font-size: clamp(24px, 2.6vw, 44px); font-weight: 600;
   letter-spacing: -.01em;
   margin-bottom: 4px;
 }
@@ -1180,7 +1248,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 }
 .lesson-meta { color: var(--text-3); font-size: 13px; margin-bottom: var(--s-3); font-family: 'JetBrains Mono', monospace; }
 .lesson-body {
-  font-size: 18px; line-height: 1.65;
+  font-size: clamp(16px, 1.3vw, 20px); line-height: 1.7;
   color: var(--text);
   user-select: text;
 }
@@ -1215,7 +1283,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 }
 
 .code {
-  background: rgba(21,0,26,.7);
+  background: rgba(17,5,37,.7);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-2);
   padding: var(--s-4) var(--s-5);
@@ -1241,7 +1309,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .notes-area {
   width: 100%;
   min-height: 320px;
-  background: rgba(21,0,26,.6);
+  background: rgba(17,5,37,.6);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-2);
   padding: var(--s-4);
@@ -1257,8 +1325,8 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 /* Progress */
 .lesson-progress {
   display: flex; align-items: center; gap: var(--s-4);
-  padding: var(--s-4) var(--s-6);
-  background: rgba(42,9,48,.7);
+  padding: var(--s-4) clamp(20px, 6vw, 160px);
+  background: rgba(37,20,64,.7);
   backdrop-filter: blur(20px);
   border-top: 1px solid var(--line-soft);
 }
@@ -1296,7 +1364,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   gap: 8px;
   padding: 8px 14px;
   background: linear-gradient(180deg, var(--accent-soft), var(--accent));
-  color: #210124;
+  color: #1B0928;
   border-radius: 999px;
   font-size: 13px; font-weight: 600;
   box-shadow: 0 6px 24px rgba(239,221,141,.45);
@@ -1393,9 +1461,9 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 }
 .celebrate-card {
   position: relative;
-  background: rgba(42,9,48,.85);
+  background: rgba(37,20,64,.85);
   backdrop-filter: blur(24px);
-  border: 1px solid var(--line);
+  border: 1px solid rgba(var(--plasma-rgb), .55);
   border-radius: var(--r-4);
   padding: var(--s-7) var(--s-7) var(--s-6);
   text-align: center;
@@ -1404,7 +1472,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   display: flex; flex-direction: column;
   align-items: center;
   gap: var(--s-3);
-  box-shadow: var(--shadow-glow), var(--shadow-2);
+  box-shadow: var(--shadow-plasma), var(--shadow-glow), var(--shadow-2);
   z-index: 2;
 }
 .celebrate h3 {
@@ -1453,34 +1521,137 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .dev-jump button:hover { background: rgba(239,221,141,.12); color: var(--accent-soft); }
 
 /* ===========================================================================
-   RESPONSIVE
+   RESPONSIVE — fluid first.
+
+   Most type, orb, and grid sizing is handled directly on the base
+   selectors with `clamp()` and `min(px, vw)`. That means layout
+   scales smoothly across any viewport (1280, 1440, 1536, 1920,
+   2560+) without abrupt breakpoint jumps.
+
+   The breakpoints below only handle things that genuinely need a
+   different *layout* at a given size (column count caps, mobile
+   stacking) — not type/size scaling.
 =========================================================================== */
 
-/* Wide PC (1440+) — keep content from feeling lost */
+/* Cap content widths on wider monitors so reading length stays
+   comfortable. These caps only kick in once the viewport is wide
+   enough to need them. */
 @media (min-width: 1280px) {
-  .ob-body { max-width: 1100px; }
-  .lesson-grid { grid-template-columns: 320px 1fr; max-width: 1280px; margin: 0 auto; width: 100%; }
-  .welcome-wrap { max-width: 820px; }
-  .topnav, .ctxbar, .lesson-progress {
-    padding-left: max(var(--s-6), calc((100vw - 1440px) / 2 + var(--s-6)));
-    padding-right: max(var(--s-6), calc((100vw - 1440px) / 2 + var(--s-6)));
-  }
-}
-@media (min-width: 1600px) {
-  .display { font-size: 72px; }
-  .h1 { font-size: 52px; }
-  .ob-body { max-width: 1200px; }
+  .ob-body { max-width: min(1480px, 88vw); }
+  .home-body { max-width: min(1640px, 92vw); }
+  .stats-body { max-width: min(1640px, 92vw); margin: 0 auto; }
 }
 
+/* Mobile: stack the lesson grid + simplify chrome. */
 @media (max-width: 900px) {
-  .lesson-grid { grid-template-columns: 1fr; }
+  .lesson-grid { grid-template-columns: 1fr; max-width: 100%; }
   .orb-side { flex-direction: row; align-items: center; position: static; flex-wrap: wrap; }
   .orb-lesson-host { width: 80px; height: 80px; }
   .orb-bubble { text-align: left; flex: 1; }
   .topnav-links { display: none; }
   .tab-pane { padding: var(--s-4); }
-  .lesson-title { font-size: 24px; }
-  .lesson-body { font-size: 16px; }
+}
+
+/* ===========================================================================
+   ORB DOPAMINE FX — bursts, shockwaves, ray bursts (peak-end fireworks)
+   Used at: correct mini-game answer (quick burst), lesson complete (mega-boom).
+   Plasma + gold to stay on brand; never used as ambient — only at peaks.
+=========================================================================== */
+
+/* Quick burst — fired on +XP / correct answer.
+   Anticipation squash → elastic scale-up → settle.
+   Total ~600ms. */
+.orb.is-bursting .orb-core {
+  animation: orb-burst-core 600ms cubic-bezier(.34, 1.56, .64, 1) !important;
+}
+.orb.is-bursting .orb-glow {
+  animation: orb-burst-glow 600ms ease-out !important;
+}
+@keyframes orb-burst-core {
+  0%   { transform: scale(1) translateY(0); filter: brightness(1) saturate(1); }
+  16%  { transform: scale(0.90) translateY(2px); }
+  46%  { transform: scale(1.20) translateY(-2px); filter: brightness(1.30) saturate(1.5); }
+  72%  { transform: scale(0.98) translateY(0); }
+  100% { transform: scale(1.00) translateY(0); filter: brightness(1) saturate(1); }
+}
+@keyframes orb-burst-glow {
+  0%   { opacity: .9; transform: scale(1); }
+  46%  { opacity: 1;  transform: scale(1.45); }
+  100% { opacity: .85; transform: scale(1); }
+}
+
+/* Mega-boom — full dopamine spike at lesson completion. ~1400ms. */
+.orb.is-boom .orb-core {
+  animation: orb-boom-core 1400ms cubic-bezier(.34, 1.56, .64, 1) !important;
+}
+.orb.is-boom .orb-glow {
+  animation: orb-boom-glow 1400ms ease-out !important;
+}
+@keyframes orb-boom-core {
+  0%   { transform: scale(1); filter: brightness(1) saturate(1); }
+  8%   { transform: scale(0.84); }                                          /* squash */
+  26%  { transform: scale(1.34); filter: brightness(1.45) saturate(1.7); }  /* peak */
+  44%  { transform: scale(1.02); }                                          /* recoil */
+  62%  { transform: scale(1.14); filter: brightness(1.20) saturate(1.3); }  /* second peak */
+  100% { transform: scale(1.00); filter: brightness(1)    saturate(1); }
+}
+@keyframes orb-boom-glow {
+  0%   { opacity: .85; transform: scale(1); }
+  26%  { opacity: 1;   transform: scale(1.7); }
+  62%  { opacity: 1;   transform: scale(1.35); }
+  100% { opacity: .85; transform: scale(1); }
+}
+
+/* Transient shockwave ring (spawned via JS, auto-removed). */
+.orb-shockwave-ring {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  border: 3px solid rgba(var(--plasma-rgb), .85);
+  pointer-events: none;
+  animation: orb-shockwave-expand 900ms cubic-bezier(.22, 1, .36, 1) forwards;
+  z-index: 4;
+}
+.orb-shockwave-ring.gold {
+  border-color: rgba(var(--accent-rgb), .85);
+}
+@keyframes orb-shockwave-expand {
+  0%   { transform: scale(0.55); opacity: 1; border-width: 4px; }
+  100% { transform: scale(2.8);  opacity: 0; border-width: 1px; }
+}
+
+/* Transient ray-burst — 12 rays radiating outward. */
+.orb-ray-burst {
+  position: absolute;
+  bottom: 50%; left: 50%;
+  width: 4px;
+  height: 130px;
+  margin-left: -2px;
+  border-radius: 4px;
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    rgba(var(--accent-rgb), 0) 0%,
+    rgba(var(--accent-rgb), .85) 55%,
+    rgba(255, 255, 217, .6) 100%
+  );
+  --ray-angle: 0deg;
+  animation: orb-ray-shoot 720ms cubic-bezier(.22, 1, .36, 1) forwards;
+  z-index: 3;
+}
+.orb-ray-burst.plasma {
+  background: linear-gradient(
+    to top,
+    rgba(var(--plasma-rgb), 0) 0%,
+    rgba(var(--plasma-rgb), .9) 55%,
+    rgba(167, 139, 250, .6) 100%
+  );
+}
+@keyframes orb-ray-shoot {
+  0%   { transform: rotate(var(--ray-angle)) scaleY(0);    opacity: 0; }
+  18%  { transform: rotate(var(--ray-angle)) scaleY(0.85); opacity: 1; }
+  100% { transform: rotate(var(--ray-angle)) scaleY(1.2);  opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1488,6 +1659,17 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   .gen-bar-fill, .progress-fill, .aurora-layer, .grain-layer {
     animation: none !important;
     transition: none !important;
+  }
+  /* Disable dopamine fx for motion-sensitive users. */
+  .orb.is-bursting .orb-core,
+  .orb.is-bursting .orb-glow,
+  .orb.is-boom .orb-core,
+  .orb.is-boom .orb-glow {
+    animation: none !important;
+  }
+  .orb-shockwave-ring,
+  .orb-ray-burst {
+    display: none !important;
   }
 }
 
@@ -1668,7 +1850,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   flex-direction: column;
   gap: 4px;
   padding: var(--s-4) var(--s-5);
-  background: rgba(42,9,48,.55);
+  background: rgba(37,20,64,.55);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -1676,7 +1858,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 }
 .stat-card:hover {
   border-color: rgba(239,221,141,.25);
-  background: rgba(42,9,48,.75);
+  background: rgba(37,20,64,.75);
   transform: translateY(-2px);
 }
 .stat-icon {
@@ -1760,7 +1942,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   text-align: left;
   gap: 4px;
   padding: var(--s-5);
-  background: rgba(42,9,48,.55);
+  background: rgba(37,20,64,.55);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -1771,16 +1953,16 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .home-tile:hover {
   transform: translateY(-3px);
   border-color: var(--line);
-  background: rgba(42,9,48,.85);
+  background: rgba(37,20,64,.85);
   box-shadow: var(--shadow-2), 0 0 0 1px rgba(239,221,141,.18);
 }
 .tile-primary {
-  background: linear-gradient(180deg, rgba(239,221,141,.14) 0%, rgba(42,9,48,.65) 100%);
+  background: linear-gradient(180deg, rgba(239,221,141,.14) 0%, rgba(37,20,64,.65) 100%);
   border-color: rgba(239,221,141,.45);
   box-shadow: 0 0 0 1px rgba(239,221,141,.1), 0 8px 24px rgba(239,221,141,.08);
 }
 .tile-primary:hover {
-  background: linear-gradient(180deg, rgba(239,221,141,.22) 0%, rgba(42,9,48,.7) 100%);
+  background: linear-gradient(180deg, rgba(239,221,141,.22) 0%, rgba(37,20,64,.7) 100%);
   border-color: rgba(239,221,141,.7);
   box-shadow: 0 0 0 1px rgba(239,221,141,.3), 0 14px 32px rgba(239,221,141,.18);
 }
@@ -1834,7 +2016,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .recent-list {
   display: flex;
   flex-direction: column;
-  background: rgba(42,9,48,.45);
+  background: rgba(37,20,64,.45);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -2044,7 +2226,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   padding: var(--s-3) var(--s-4);
   font-size: 14px;
   color: var(--text);
-  background: rgba(42,9,48,.5);
+  background: rgba(37,20,64,.5);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
   font-family: inherit;
@@ -2053,7 +2235,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .vocab-search:focus {
   outline: none;
   border-color: var(--accent);
-  background: rgba(42,9,48,.7);
+  background: rgba(37,20,64,.7);
   box-shadow: 0 0 0 3px rgba(239,221,141,.12);
 }
 .vocab-search::placeholder { color: var(--text-3); }
@@ -2094,7 +2276,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   flex-direction: column;
   gap: var(--s-2);
   padding: var(--s-4) var(--s-5);
-  background: rgba(42,9,48,.55);
+  background: rgba(37,20,64,.55);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -2106,7 +2288,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 .vocab-card:hover {
   transform: translateY(-2px);
   border-color: var(--line);
-  background: rgba(42,9,48,.85);
+  background: rgba(37,20,64,.85);
 }
 .vocab-card.is-known { opacity: .65; }
 .vocab-card.is-known .vocab-word { color: var(--text-2); }
@@ -2205,7 +2387,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   gap: var(--s-5);
 }
 .settings-group {
-  background: rgba(42,9,48,.45);
+  background: rgba(37,20,64,.45);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-3);
@@ -2456,7 +2638,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   pointer-events: none;
 }
 .toast {
-  background: rgba(42,9,48,.95);
+  background: rgba(37,20,64,.95);
   backdrop-filter: blur(14px);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -2521,7 +2703,11 @@ body.force-focus .aurora-layer { filter: blur(20px) opacity(.5); }
   margin: 60px auto 40px;
 }
 .auth-wrap .display { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0; }
-.orb-mini-host {
+/* Auth-only override: bigger orb host in signup/login views.
+   Scoped so it doesn't override the 56px .orb-mini-host used in
+   onboarding `.ob-head` (which would otherwise let the orb glow
+   bleed into the "Bun. De unde începem?" title). */
+.auth-wrap .orb-mini-host {
   width: 120px; height: 120px;
   display: grid; place-items: center;
   margin-bottom: 8px;
@@ -2679,9 +2865,14 @@ body.force-focus .aurora-layer { filter: blur(20px) opacity(.5); }
   font-size: .92rem;
 }
 .leaderboard-row.is-me {
-  border-color: var(--gold);
-  background: rgba(239, 221, 141, .1);
-  box-shadow: 0 0 0 2px rgba(239, 221, 141, .15);
+  border-color: rgba(var(--plasma-rgb), .55);
+  background:
+    linear-gradient(135deg,
+      rgba(var(--plasma-rgb), .14) 0%,
+      rgba(239, 221, 141, .10) 100%);
+  box-shadow:
+    0 0 0 2px rgba(var(--plasma-rgb), .25),
+    0 0 24px rgba(var(--plasma-rgb), .18);
 }
 .leaderboard-row .lb-rank {
   font-family: 'Instrument Serif', serif; font-style: italic;
