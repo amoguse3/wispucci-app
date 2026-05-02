@@ -272,10 +272,12 @@ body.in-lesson .embers-canvas { opacity: .55; }
   display: block;
 }
 /* Fluid orb sizing — the hero scales with the viewport instead of
-   needing a 1920+ breakpoint. Caps prevent absurd sizes on 4K. */
+   needing a 1920+ breakpoint. Caps prevent absurd sizes on 4K.
+   Welcome (orb-stage) stays bigger as a hero element; lesson host
+   is tighter so it doesn't compete with the reading column. */
 .orb-stage  { width: clamp(240px, 22vw, 420px); height: clamp(240px, 22vw, 420px); margin: 0 auto; aspect-ratio: 1; }
 .orb-mini-host { width: 56px; height: 56px; }
-.orb-lesson-host { width: clamp(180px, 14vw, 280px); height: clamp(180px, 14vw, 280px); aspect-ratio: 1; }
+.orb-lesson-host { width: clamp(160px, 12vw, 240px); height: clamp(160px, 12vw, 240px); aspect-ratio: 1; }
 .celebrate-orb-host { width: 180px; height: 180px; margin-bottom: var(--s-3); }
 
 .orb {
@@ -1129,13 +1131,13 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   flex: 1;
   display: grid;
   /* Fluid: orb-side track scales with viewport, lesson content takes
-     the rest. No more abrupt breakpoint jumps. */
-  grid-template-columns: clamp(260px, 22vw, 460px) 1fr;
-  gap: clamp(20px, 2.4vw, 56px);
-  padding: clamp(20px, 2.4vw, 56px);
-  /* Use up to 92% of the viewport width with a hard cap so on a 4K
-     monitor the lesson card doesn't stretch beyond reading length. */
-  max-width: min(1760px, 94vw);
+     the rest. Tightened after user feedback that the card was too
+     wide (filled the whole viewport). Now caps at 1280px so the
+     reading column stays comfortable (~85ch at 18-20px). */
+  grid-template-columns: clamp(240px, 18vw, 380px) 1fr;
+  gap: clamp(20px, 2vw, 48px);
+  padding: clamp(20px, 2vw, 48px);
+  max-width: min(1280px, 82vw);
   margin: 0 auto;
   width: 100%;
   align-content: start;
