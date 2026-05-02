@@ -12,8 +12,10 @@ from backend.database import close_db, init_db
 from backend.routers import (
     auth,
     events,
+    leaderboard,
     lessons,
     settings as settings_router,
+    stats,
     streak,
     tutor,
     vocab,
@@ -33,10 +35,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow frontend to call the API
+# CORS — allow the static frontend to call the API.
+# We use allow_origin_regex so any localhost / 127.0.0.1 dev port works
+# out of the box, and we also accept any explicit origins from settings.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    # Localhost dev + any *.devinapps.com / *.fly.dev preview domain.
+    allow_origin_regex=(
+        r"^https?://("
+        r"(localhost|127\.0\.0\.1)(:\d+)?"
+        r"|[a-z0-9-]+\.devinapps\.com"
+        r"|[a-z0-9-]+\.fly\.dev"
+        r")$"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,6 +62,8 @@ app.include_router(tutor.router, prefix="/api/tutor", tags=["AI Tutor"])
 app.include_router(settings_router.router, prefix="/api/me", tags=["Settings"])
 app.include_router(streak.router, prefix="/api/me", tags=["Streak & XP"])
 app.include_router(events.router, prefix="/api", tags=["Events"])
+app.include_router(stats.router, prefix="/api", tags=["Stats"])
+app.include_router(leaderboard.router, prefix="/api", tags=["Leaderboard"])
 
 
 @app.get("/api/health")

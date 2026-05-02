@@ -1,25 +1,100 @@
 // =========================================================
-// Wispucci demo v4 — brows + eye-shine, calm celebration, constellation generation
+// Wispucci MVP — orb companion, auth, Statistica, mini-games
 // =========================================================
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
 
 // =========================================================
-// PERSISTENT STATE (localStorage)
+// API CLIENT (talks to FastAPI backend)
 // =========================================================
-const STORE_KEY = 'wispucci.v1';
+const API_BASE = (() => {
+  // Talk to the backend on the same host. In local dev we serve the
+  // frontend on :8000 (python -m http.server) and the backend on :8801.
+  const explicit = window.WISPUCCI_API_BASE;
+  if (explicit) return explicit;
+  if (location.port && location.port !== '8801') {
+    return `${location.protocol}//${location.hostname}:8801`;
+  }
+  return location.origin;
+})();
+
+const Auth = {
+  TOKEN_KEY: 'wispucci.token',
+  USER_KEY: 'wispucci.user',
+  get token() { return localStorage.getItem(this.TOKEN_KEY) || ''; },
+  set token(v) {
+    if (v) localStorage.setItem(this.TOKEN_KEY, v);
+    else localStorage.removeItem(this.TOKEN_KEY);
+  },
+  get user() {
+    try { return JSON.parse(localStorage.getItem(this.USER_KEY) || 'null'); }
+    catch (_) { return null; }
+  },
+  set user(v) {
+    if (v) localStorage.setItem(this.USER_KEY, JSON.stringify(v));
+    else localStorage.removeItem(this.USER_KEY);
+  },
+  clear() { this.token = null; this.user = null; },
+  isLoggedIn() { return !!this.token; },
+};
+
+async function apiFetch(path, opts = {}) {
+  const headers = Object.assign(
+    { 'Content-Type': 'application/json' },
+    opts.headers || {},
+  );
+  if (Auth.token) headers['Authorization'] = `Bearer ${Auth.token}`;
+  let resp;
+  try {
+    resp = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  } catch (err) {
+    throw new Error('rețeaua nu răspunde');
+  }
+  if (resp.status === 401) {
+    Auth.clear();
+  }
+  let data = null;
+  try { data = await resp.json(); } catch (_) {}
+  if (!resp.ok) {
+    let msg = `eroare ${resp.status}`;
+    if (data) {
+      if (typeof data.detail === 'string') msg = data.detail;
+      else if (Array.isArray(data.detail) && data.detail.length) {
+        // FastAPI 422 validation: list of {loc, msg, type, ...}
+        msg = data.detail.map(d => d.msg || d.message || JSON.stringify(d)).join(' · ');
+      } else if (typeof data.message === 'string') msg = data.message;
+    }
+    const err = new Error(msg);
+    err.status = resp.status;
+    err.body = data;
+    throw err;
+  }
+  return data;
+}
+
+const api = {
+  signup: (body) => apiFetch('/api/auth/signup', { method: 'POST', body: JSON.stringify(body) }),
+  login: (body) => apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  me: () => apiFetch('/api/auth/me'),
+  buildLesson: (body) => apiFetch('/api/tutor/lesson/build', { method: 'POST', body: JSON.stringify(body) }),
+  miniGame: (lessonId, type = 'auto') =>
+    apiFetch(`/api/tutor/minigame?lesson_id=${encodeURIComponent(lessonId)}&game_type=${encodeURIComponent(type)}`, { method: 'POST' }),
+  miniTest: (moduleId) =>
+    apiFetch(`/api/tutor/test/build?module_id=${encodeURIComponent(moduleId)}`, { method: 'POST' }),
+  stats: () => apiFetch('/api/me/stats'),
+  leaderboard: (period = 'weekly') => apiFetch(`/api/leaderboard/${period}`),
+  saveSettings: (settings) =>
+    apiFetch('/api/me/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+};
+
+// =========================================================
+// LOCAL STATE (UI-only, never authoritative for XP/streak)
+// =========================================================
+const STORE_KEY = 'wispucci.ui.v2';
 const defaultStore = {
-  streak: 3,
-  longestStreak: 12,
-  xpWeek: 142,
-  xpToday: 47,
-  xpTotal: 1248,
-  lessonsDone: 8,
-  lessonsTotal: 24,
   lastView: 'welcome',
-  knownWords: [],         // ids of vocab words the user marked as "știu"
-  customWords: [],        // user-added (e.g. via Salvează în vocabular)
+  lessonProgress: 0,
   settings: {
     forceFocus: false,
     silent: false,
@@ -27,7 +102,6 @@ const defaultStore = {
     pace: 'normal',
     embersIntensity: 60,
   },
-  lessonProgress: 47,
 };
 const Store = (() => {
   let raw;
@@ -39,11 +113,6 @@ const Store = (() => {
     save: () => {
       try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (_) {}
     },
-    reset: () => {
-      try { localStorage.removeItem(STORE_KEY); } catch (_) {}
-      Object.assign(data, defaultStore);
-      data.settings = Object.assign({}, defaultStore.settings);
-    },
   };
 })();
 
@@ -53,18 +122,25 @@ const state = {
   level: 2,
   progress: Store.get().lessonProgress,
   view: 'welcome',
+  generatedModule: null,   // { module_id, title, lessons:[{id,title,...}] }
+  currentLesson: null,     // lesson object from backend
+  leaderboardPeriod: 'weekly',
+  statsCache: null,
 };
 
+// =========================================================
+// TOPICS — subject → list of starter topic cards
+// =========================================================
 const TOPICS = {
   'Programare': [
-    { title: 'Python — bazele', sub: 'Variabile · funcții · liste', icon: 'PY', est: '4 module · 25 min' },
-    { title: 'JavaScript modern', sub: 'ES6+ · async · DOM',         icon: 'JS', est: '5 module · 30 min' },
-    { title: 'Rust',             sub: 'Ownership · borrow · traits', icon: 'RS', est: '6 module · 45 min' },
-    { title: 'Go',               sub: 'Concurency · interfaces',     icon: 'GO', est: '4 module · 28 min' },
-    { title: 'Algoritmi',        sub: 'Sortări · căutări · grafuri', icon: '∑',  est: '6 module · 40 min' },
-    { title: 'OOP',              sub: 'Clase · moștenire · polim.',  icon: '◇',  est: '4 module · 22 min' },
-    { title: 'Web — front',      sub: 'HTML · CSS · React',          icon: '⌘',  est: '5 module · 35 min' },
-    { title: 'API REST',         sub: 'HTTP · JSON · auth',          icon: '⇄',  est: '4 module · 28 min' },
+    { title: 'Python — bazele', sub: 'Variabile · funcții · liste', icon: 'PY', est: '4 lecții · 20 min' },
+    { title: 'JavaScript modern', sub: 'ES6+ · async · DOM',         icon: 'JS', est: '4 lecții · 25 min' },
+    { title: 'Rust',             sub: 'Ownership · borrow · traits', icon: 'RS', est: '4 lecții · 30 min' },
+    { title: 'Go',               sub: 'Concurency · interfaces',     icon: 'GO', est: '4 lecții · 22 min' },
+    { title: 'Algoritmi',        sub: 'Sortări · căutări · grafuri', icon: '∑',  est: '4 lecții · 30 min' },
+    { title: 'OOP',              sub: 'Clase · moștenire · polim.',  icon: '◇',  est: '4 lecții · 18 min' },
+    { title: 'Web — front',      sub: 'HTML · CSS · React',          icon: '⌘',  est: '4 lecții · 28 min' },
+    { title: 'API REST',         sub: 'HTTP · JSON · auth',          icon: '⇄',  est: '4 lecții · 22 min' },
   ],
   'Limbă străină': [
     { title: 'Engleză',     sub: 'B1 → B2 conversațional', icon: 'EN', est: 'continuu · 10 min/zi' },
@@ -75,20 +151,20 @@ const TOPICS = {
     { title: 'Conversație', sub: 'oral + corectări live',   icon: '💬', est: 'continuu · 15 min/zi' },
   ],
   'Matematică': [
-    { title: 'Algebră',         sub: 'expresii · ecuații · sistem', icon: 'a+b', est: '5 module · 35 min' },
-    { title: 'Analiză',         sub: 'limite · derivate · integ.',  icon: '∫',   est: '6 module · 45 min' },
-    { title: 'Statistică',      sub: 'medii · varianță · teste',    icon: 'σ',   est: '4 module · 28 min' },
-    { title: 'Trigonometrie',   sub: 'sin · cos · identități',      icon: 'θ',   est: '4 module · 24 min' },
-    { title: 'Logaritmi',       sub: 'log · exp · ecuații',         icon: 'log', est: '3 module · 18 min' },
-    { title: 'Probabilități',   sub: 'evenimente · Bayes',          icon: 'P',   est: '4 module · 26 min' },
+    { title: 'Algebră',         sub: 'expresii · ecuații · sistem', icon: 'a+b', est: '4 lecții · 28 min' },
+    { title: 'Analiză',         sub: 'limite · derivate · integ.',  icon: '∫',   est: '4 lecții · 32 min' },
+    { title: 'Statistică',      sub: 'medii · varianță · teste',    icon: 'σ',   est: '4 lecții · 22 min' },
+    { title: 'Trigonometrie',   sub: 'sin · cos · identități',      icon: 'θ',   est: '4 lecții · 20 min' },
+    { title: 'Logaritmi',       sub: 'log · exp · ecuații',         icon: 'log', est: '4 lecții · 18 min' },
+    { title: 'Probabilități',   sub: 'evenimente · Bayes',          icon: 'P',   est: '4 lecții · 22 min' },
   ],
   'Altceva': [
-    { title: 'Fizică',     sub: 'mecanică · electricitate', icon: 'φ', est: '5 module · 35 min' },
-    { title: 'Chimie',     sub: 'organic · reacții',         icon: 'C', est: '4 module · 28 min' },
-    { title: 'Istorie',    sub: 'epoci · procese',           icon: 'H', est: '6 module · 40 min' },
-    { title: 'Biologie',   sub: 'celulă · genetică',         icon: 'β', est: '5 module · 32 min' },
-    { title: 'Filozofie',  sub: 'logică · etică',            icon: 'Φ', est: '4 module · 26 min' },
-    { title: 'Economie',   sub: 'micro · macro · finanțe',   icon: '€', est: '5 module · 30 min' },
+    { title: 'Fizică',     sub: 'mecanică · electricitate', icon: 'φ', est: '4 lecții · 28 min' },
+    { title: 'Chimie',     sub: 'organic · reacții',         icon: 'C', est: '4 lecții · 22 min' },
+    { title: 'Istorie',    sub: 'epoci · procese',           icon: 'H', est: '4 lecții · 30 min' },
+    { title: 'Biologie',   sub: 'celulă · genetică',         icon: 'β', est: '4 lecții · 24 min' },
+    { title: 'Filozofie',  sub: 'logică · etică',            icon: 'Φ', est: '4 lecții · 22 min' },
+    { title: 'Economie',   sub: 'micro · macro · finanțe',   icon: '€', est: '4 lecții · 24 min' },
   ],
 };
 
@@ -103,178 +179,97 @@ class EmbersBackground {
     this.maxSpeed = opts.maxSpeed || 0.45;
     this.particles = [];
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.resize = this.resize.bind(this);
-    this.tick = this.tick.bind(this);
-    window.addEventListener('resize', this.resize);
     this.resize();
+    window.addEventListener('resize', () => this.resize());
     this.spawn();
+    this.tick = this.tick.bind(this);
     requestAnimationFrame(this.tick);
   }
   resize() {
     const c = this.canvas;
-    const w = c.offsetWidth, h = c.offsetHeight;
-    c.width = w * this.dpr; c.height = h * this.dpr;
+    c.width = window.innerWidth * this.dpr;
+    c.height = window.innerHeight * this.dpr;
+    c.style.width = window.innerWidth + 'px';
+    c.style.height = window.innerHeight + 'px';
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.W = w; this.H = h;
   }
   spawn() {
-    this.particles = Array.from({ length: this.density }, () => this.makeParticle(true));
+    this.particles = [];
+    const n = Math.round(this.density * (window.innerWidth / 1280));
+    for (let i = 0; i < n; i++) {
+      this.particles.push(this._mkP(true));
+    }
   }
-  makeParticle(initial = false) {
+  _mkP(initial = false) {
+    const W = window.innerWidth, H = window.innerHeight;
     return {
-      x: Math.random() * this.W,
-      y: initial ? Math.random() * this.H : this.H + 10,
-      vx: (Math.random() - 0.5) * 0.3,
-      vy: -0.15 - Math.random() * this.maxSpeed,
-      r: 0.6 + Math.random() * 1.6,
-      alpha: 0,
-      maxAlpha: 0.35 + Math.random() * 0.55,
-      life: 0,
-      maxLife: 800 + Math.random() * 1200,
-      hueShift: Math.random() < 0.3 ? 1 : 0,
-      flicker: Math.random() * Math.PI * 2,
-      flickerSpeed: 0.04 + Math.random() * 0.06,
+      x: Math.random() * W,
+      y: initial ? Math.random() * H : H + Math.random() * 80,
+      r: 0.6 + Math.random() * 1.4,
+      vy: -(0.15 + Math.random() * this.maxSpeed),
+      vx: (Math.random() - 0.5) * 0.18,
+      a: 0.2 + Math.random() * 0.7,
+      flick: Math.random() * Math.PI * 2,
     };
   }
   tick() {
-    const ctx = this.ctx;
-    ctx.clearRect(0, 0, this.W, this.H);
-    ctx.globalCompositeOperation = 'lighter';
+    if (document.body.classList.contains('embers-paused')) {
+      requestAnimationFrame(this.tick);
+      return;
+    }
+    const W = window.innerWidth, H = window.innerHeight;
+    this.ctx.clearRect(0, 0, W, H);
+    const intensity = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--embers-opacity')) || 0.6;
+    this.ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < this.particles.length; i++) {
       const p = this.particles[i];
-      p.x += p.vx + Math.sin(p.life * 0.005) * 0.3;
+      p.x += p.vx;
       p.y += p.vy;
-      p.life += 1;
-      p.flicker += p.flickerSpeed;
-      const lifeRatio = p.life / p.maxLife;
-      if (lifeRatio < 0.15) p.alpha = (lifeRatio / 0.15) * p.maxAlpha;
-      else if (lifeRatio > 0.7) p.alpha = ((1 - lifeRatio) / 0.3) * p.maxAlpha;
-      else p.alpha = p.maxAlpha;
-      p.alpha *= 0.7 + Math.sin(p.flicker) * 0.3;
-      if (p.y < -20 || p.life > p.maxLife) {
-        this.particles[i] = this.makeParticle();
-        continue;
+      p.flick += 0.07;
+      const alpha = (Math.sin(p.flick) * 0.3 + 0.7) * p.a * intensity;
+      this.ctx.fillStyle = `rgba(239, 221, 141, ${alpha})`;
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      this.ctx.fill();
+      if (p.y < -20 || p.x < -20 || p.x > W + 20) {
+        this.particles[i] = this._mkP(false);
       }
-      const color = p.hueShift
-        ? `rgba(255, 255, 217, ${p.alpha})`
-        : `rgba(239, 221, 141, ${p.alpha})`;
-      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 6);
-      grad.addColorStop(0, color);
-      grad.addColorStop(0.4, `rgba(239, 221, 141, ${p.alpha * 0.4})`);
-      grad.addColorStop(1, 'rgba(239, 221, 141, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 6, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = `rgba(255, 246, 204, ${p.alpha * 0.9})`;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 0.6, 0, Math.PI * 2); ctx.fill();
     }
-    ctx.globalCompositeOperation = 'source-over';
+    this.ctx.globalCompositeOperation = 'source-over';
     requestAnimationFrame(this.tick);
   }
 }
-const embers = new EmbersBackground($('#embersCanvas'), { density: 40 });
+new EmbersBackground($('#embersCanvas'));
 
 // =========================================================
-// ORB FACE — eyes + mouth, state-driven expressions
+// ORB STATE MACHINE — face / mood
 // =========================================================
 const orbFlyer = $('#orbFlyer');
-const theOrb   = $('#theOrb');
-const eyesG    = $('.face-eyes', theOrb);
-const mouth    = $('.mouth', theOrb);
-const eyeL     = $('.eye-l', theOrb);
-const eyeR     = $('.eye-r', theOrb);
+const theOrb = $('#theOrb');
+const orbFace = theOrb.querySelector('.orb-face');
 
-// Mouth path presets per state — same structure (M..Q..) for clean morph
-const MOUTH_PATHS = {
-  idle:        'M 40 65 Q 50 67 60 65',
-  listening:   'M 40 65 Q 50 67 60 65',
-  thinking:    'M 44 66 Q 50 64 56 66',
-  speakingA:   'M 40 65 Q 50 67 60 65', // closed
-  speakingB:   'M 40 64 Q 50 71 60 64', // open
-  speakingC:   'M 40 65 Q 50 69 60 65', // half
-  happy:       'M 35 62 Q 50 76 65 62',
-  sad:         'M 35 70 Q 50 61 65 70',
-  confused:    'M 38 66 Q 50 63 62 69',
-  celebrating: 'M 32 60 Q 50 80 68 60',
-};
+function setOrbState(s) {
+  const states = ['idle', 'listening', 'thinking', 'speaking', 'happy', 'sad', 'confused', 'celebrating'];
+  states.forEach(x => theOrb.classList.toggle(`is-${x}`, x === s));
+  const label = $('#orbState');
+  if (label) label.textContent = ({
+    idle: 'gata',
+    listening: 'ascultă',
+    thinking: 'gândește',
+    speaking: 'explică',
+    happy: 'bucuros',
+    sad: 'trist',
+    confused: 'confuz',
+    celebrating: 'sărbătorește',
+  })[s] || s;
+}
 
-const ORB_STATES = ['idle', 'listening', 'thinking', 'speaking', 'celebrating', 'confused', 'sad', 'happy'];
-let currentOrbState = 'idle';
-let speakingTimeline = null;
-let blinkTimeout = null;
+// Subtle blink loop
 let isBlinking = false;
-
-const orbFace = $('.orb-face', theOrb);
-
-function setMouth(name) {
-  const path = MOUTH_PATHS[name] || MOUTH_PATHS.idle;
-  // Smooth morph via attribute interpolation: GSAP can't morph SVG path strings
-  // without MorphSVG, so we use a simple animated transition by setting d via
-  // requestAnimationFrame interpolating Q control points.
-  morphMouthTo(path);
-}
-
-let mouthTween = null;
-function morphMouthTo(targetD) {
-  const cur = parseQuadPath(mouth.getAttribute('d'));
-  const tgt = parseQuadPath(targetD);
-  if (!cur || !tgt) {
-    mouth.setAttribute('d', targetD);
-    return;
-  }
-  const obj = { ...cur };
-  if (mouthTween) mouthTween.kill();
-  mouthTween = gsap.to(obj, {
-    mx: tgt.mx, my: tgt.my, cx: tgt.cx, cy: tgt.cy, ex: tgt.ex, ey: tgt.ey,
-    duration: 0.45, ease: 'power2.out',
-    onUpdate: () => {
-      mouth.setAttribute('d',
-        `M ${obj.mx.toFixed(2)} ${obj.my.toFixed(2)} Q ${obj.cx.toFixed(2)} ${obj.cy.toFixed(2)} ${obj.ex.toFixed(2)} ${obj.ey.toFixed(2)}`);
-    },
-  });
-}
-
-function parseQuadPath(d) {
-  // Expects "M x y Q cx cy ex ey"
-  const m = d.match(/M\s*([-\d.]+)\s+([-\d.]+)\s*Q\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/);
-  if (!m) return null;
-  return { mx: +m[1], my: +m[2], cx: +m[3], cy: +m[4], ex: +m[5], ey: +m[6] };
-}
-
-function setOrbState(name) {
-  if (!ORB_STATES.includes(name)) return;
-  ORB_STATES.forEach(s => theOrb.classList.remove('is-' + s));
-  if (name !== 'idle') theOrb.classList.add('is-' + name);
-  currentOrbState = name;
-
-  if (speakingTimeline) { speakingTimeline.kill(); speakingTimeline = null; }
-
-  // Apply face expression — eyes via CSS state classes, mouth via JS path morph
-  if (name === 'speaking') {
-    speakingTimeline = gsap.timeline({ repeat: -1 });
-    const pattern = ['speakingA','speakingB','speakingA','speakingC','speakingB','speakingA'];
-    pattern.forEach(p => {
-      speakingTimeline.add(() => morphMouthTo(MOUTH_PATHS[p]));
-      speakingTimeline.to({}, { duration: 0.18 });
-    });
-  } else {
-    setMouth(name);
-  }
-
-  // Update label & emotion buttons
-  const labelEl = $('#orbState');
-  if (labelEl) labelEl.textContent = name === 'idle' ? 'ascultă' : name;
-  $$('.emotion-btn').forEach(b => b.classList.toggle('is-on', b.dataset.emotion === name));
-
-  // Restart blink loop (skip blink when sad/happy/celebrating since eyes already closed-ish)
-  if (blinkTimeout) clearTimeout(blinkTimeout);
-  if (!['happy', 'celebrating', 'sad'].includes(name)) {
-    scheduleBlink();
-  }
-}
-
 function scheduleBlink() {
-  blinkTimeout = setTimeout(() => {
-    if (isBlinking) return;
+  setTimeout(() => {
+    if (!orbFace) return scheduleBlink();
+    if (isBlinking) return scheduleBlink();
     isBlinking = true;
     orbFace.classList.add('blink');
     setTimeout(() => {
@@ -284,25 +279,20 @@ function scheduleBlink() {
     }, 110);
   }, 2400 + Math.random() * 3000);
 }
+scheduleBlink();
 
 // =========================================================
-// ORB POSITIONING — direct GSAP tween (no FLIP teleport)
+// ORB POSITIONING — anchored to per-view host
 // =========================================================
-
 function getHostRect(viewName) {
-  let host;
-  if (viewName === 'welcome')               host = $('[data-orb-host="welcome"]');
-  else if (viewName === 'home')             host = $('[data-orb-host="home"]');
-  else if (viewName.startsWith('onboarding-')) host = $(`[data-orb-host="${viewName}"]`);
-  else if (viewName === 'lesson')           host = $('[data-orb-host="lesson"]');
-  else if (viewName === 'celebrate')        host = $('[data-orb-host="celebrate"]');
-  return host;
+  return $(`[data-orb-host="${viewName}"]`);
 }
 
 function placeOrbInstantlyAt(viewName) {
   const host = getHostRect(viewName);
   if (!host) return;
   const r = host.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return;
   gsap.set(orbFlyer, { x: r.left, y: r.top, width: r.width, height: r.height });
 }
 
@@ -310,9 +300,10 @@ function moveOrbToHost(viewName, opts = {}) {
   const host = getHostRect(viewName);
   if (!host) return;
   const r = host.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return;
   gsap.to(orbFlyer, {
     x: r.left, y: r.top, width: r.width, height: r.height,
-    duration: opts.duration ?? 0.85,
+    duration: opts.duration ?? 0.7,
     ease: opts.ease ?? 'power3.inOut',
   });
 }
@@ -320,8 +311,18 @@ function moveOrbToHost(viewName, opts = {}) {
 // =========================================================
 // VIEW SWITCHING
 // =========================================================
+const VIEWS_WITH_ORB = new Set([
+  'welcome', 'auth-login', 'auth-signup', 'home', 'lesson', 'celebrate',
+]);
+const PROTECTED_VIEWS = new Set(['home', 'lesson', 'stats', 'settings']);
 
 function showView(name) {
+  // Auth gate: protected views require a token
+  if (PROTECTED_VIEWS.has(name) && !Auth.isLoggedIn()) {
+    showView('auth-login');
+    return;
+  }
+
   $$('.view').forEach(v => v.classList.toggle('is-active', v.dataset.view === name));
   state.view = name;
 
@@ -347,67 +348,60 @@ function showView(name) {
     });
   }
 
-  // Hide orb for views without an orb host (vocab, settings)
-  const hasOrb = ['welcome', 'home', 'lesson', 'celebrate'].includes(name) || name.startsWith('onboarding-');
+  // Hide orb for views without an orb host (stats, settings, onboarding-* use mini host)
+  const hasOrb = VIEWS_WITH_ORB.has(name) || name.startsWith('onboarding-');
   orbFlyer.style.opacity = hasOrb ? '1' : '0';
   orbFlyer.style.pointerEvents = hasOrb ? '' : 'none';
 
-  // Animate orb to its host for this view
-  if (hasOrb) moveOrbToHost(name);
+  if (hasOrb) {
+    // Wait one frame so the new view's host has the right layout before measuring.
+    requestAnimationFrame(() => moveOrbToHost(name));
+  }
 
-  // Toggle in-lesson body class so background FX calm down for reading
-  // Force-focus setting from Settings also reduces FX everywhere
+  // In-lesson focus mode
   const focused = (name === 'lesson') || Store.get().settings.forceFocus;
   document.body.classList.toggle('in-lesson', focused);
 
-  // Update topnav-links is-active across every page-style nav
+  // Topnav active marker
   $$('[data-page-nav] li').forEach(li => {
     const link = li.querySelector('[data-go]');
     li.classList.toggle('is-active', !!(link && link.dataset.go === name));
   });
 
-  // Persist last view (so refresh resumes here — except welcome, that's first-run only)
-  if (['home', 'lesson', 'vocab', 'settings'].includes(name)) {
+  // Persist last view (so refresh resumes here)
+  if (PROTECTED_VIEWS.has(name)) {
     Store.get().lastView = name;
     Store.save();
   }
 
   // View-specific init
-  if (name === 'vocab')    renderVocab();
+  if (name === 'stats')    renderStats();
   if (name === 'settings') initSettingsView();
+  if (name === 'lesson')   initLesson();
+  if (name === 'home')     refreshHome();
 
-  // Drive orb state
+  // Drive orb mood
   if (name === 'welcome')           setOrbState('idle');
+  else if (name === 'auth-login')   setOrbState('listening');
+  else if (name === 'auth-signup')  setOrbState('listening');
   else if (name === 'home')         setOrbState('happy');
   else if (name === 'onboarding-1') setOrbState('listening');
   else if (name === 'onboarding-2') setOrbState('listening');
   else if (name === 'onboarding-3') setOrbState('listening');
   else if (name === 'onboarding-4') { setOrbState('thinking'); runGeneration(); }
-  else if (name === 'lesson')       { setOrbState('idle'); initLesson(); }
+  else if (name === 'lesson')       setOrbState('idle');
 
   const el = $(`.view[data-view="${name}"]`);
   if (el && window.gsap) {
-    gsap.from(el.querySelectorAll('.h1, .display, .lead, .card-grid, .topic-grid, .topic-custom, .level-grid, .gen-list, .gen-bar, .gen-pct, .lesson-card, .topnav, .ctxbar, .lesson-progress, .cta-row, .ob-progress, .orb-line, .footnote'), {
-      opacity: 0, y: 8, duration: .45, stagger: .03, ease: 'power2.out', delay: .15
+    gsap.from(el.querySelectorAll('.h1, .display, .lead, .card-grid, .topic-grid, .topic-custom, .level-grid, .gen-list, .gen-bar, .gen-pct, .lesson-card, .topnav, .ctxbar, .lesson-progress, .cta-row, .ob-progress, .orb-line, .footnote, .auth-form, .stats-row, .stats-section, .home-stats, .home-tiles, .recent-list'), {
+      opacity: 0, y: 8, duration: .45, stagger: .03, ease: 'power2.out', delay: .12,
     });
   }
 }
 
-window.addEventListener('load', () => {
-  // Position orb instantly on welcome host
-  placeOrbInstantlyAt('welcome');
-  setOrbState('idle');
-
-  // Re-anchor on resize
-  window.addEventListener('resize', () => placeOrbInstantlyAt(state.view));
-
-  gsap.from('.welcome-wrap .display',  { y: 24, opacity: 0, duration: .9, delay: .3, ease: 'power3.out' });
-  gsap.from('.welcome-wrap .lead',     { y: 14, opacity: 0, duration: .8, delay: .55, ease: 'power3.out' });
-  gsap.from('.welcome-wrap .btn',      { y: 10, opacity: 0, duration: .7, delay: .75, ease: 'power3.out' });
-  gsap.from('.welcome-wrap .footnote', { opacity: 0, duration: .6, delay: .95 });
-});
-
-// Wire navigation
+// =========================================================
+// NAVIGATION WIRING
+// =========================================================
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-go]');
   if (!btn) return;
@@ -426,17 +420,77 @@ $$('.level').forEach(el => {
   });
 });
 
-// Emotion demo buttons
-$$('.emotion-btn').forEach(b => {
-  b.addEventListener('click', () => setOrbState(b.dataset.emotion));
+// =========================================================
+// AUTH FORMS
+// =========================================================
+$('#loginForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const err = $('#loginError');
+  err.hidden = true;
+  const submit = f.querySelector('.auth-submit');
+  submit.disabled = true;
+  submit.textContent = 'Intru…';
+  try {
+    const data = await api.login({
+      email: f.email.value.trim(),
+      password: f.password.value,
+    });
+    Auth.token = data.token;
+    Auth.user = data.user;
+    showToast('bun revenit', '✓');
+    showView('home');
+  } catch (ex) {
+    err.textContent = humanError(ex.message);
+    err.hidden = false;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = 'Intră';
+  }
 });
 
+$('#signupForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const err = $('#signupError');
+  err.hidden = true;
+  const submit = f.querySelector('.auth-submit');
+  submit.disabled = true;
+  submit.textContent = 'Salvez…';
+  try {
+    const data = await api.signup({
+      email: f.email.value.trim(),
+      password: f.password.value,
+      name: f.name.value.trim() || 'user',
+    });
+    Auth.token = data.token;
+    Auth.user = data.user;
+    showToast('bine ai venit la Wispucci', '✓');
+    showView('home');
+  } catch (ex) {
+    err.textContent = humanError(ex.message);
+    err.hidden = false;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = 'Salvează contul';
+  }
+});
+
+function humanError(raw) {
+  const m = (raw || '').toLowerCase();
+  if (m.includes('already')) return 'există deja un cont cu acest email.';
+  if (m.includes('reserved name') || m.includes('not a valid email')) return 'email invalid — folosește un domeniu real (gmail, yahoo, …).';
+  if (m.includes('credential') || m.includes('incorrect') || m.includes('invalid email or password')) return 'email sau parolă greșită.';
+  if (m.includes('rețeaua') || m.includes('failed to fetch')) return 'fără internet — verifică conexiunea.';
+  return raw || 'ceva n-a mers, încearcă din nou.';
+}
+
 // =========================================================
-// GENERATION SCREEN
+// GENERATION SCREEN — calls real backend, falls back to demo
 // =========================================================
 let genTl;
 
-function runGeneration() {
+async function runGeneration() {
   const items = $$('#genList li');
   const fill = $('#genBarFill');
   const pct  = $('#genPct');
@@ -450,10 +504,23 @@ function runGeneration() {
 
   const streamCtx = startStreamCanvas(stream);
 
+  // Kick off the real backend call in parallel with the timeline animation
+  const buildPromise = Auth.isLoggedIn()
+    ? api.buildLesson({
+        subject: state.subject,
+        topic: state.topic,
+        level: state.level,
+        lesson_count: 4,
+      }).catch(err => {
+        console.warn('build failed', err);
+        return null;
+      })
+    : Promise.resolve(null);
+
   if (genTl) genTl.kill();
   genTl = gsap.timeline();
 
-  const stepDuration = 1.0;
+  const stepDuration = 0.9;
   items.forEach((li, i) => {
     genTl.add(() => {
       items.forEach(x => x.classList.remove('is-active'));
@@ -484,11 +551,22 @@ function runGeneration() {
     });
   });
 
-  genTl.add(() => {
+  genTl.add(async () => {
     setOrbState('happy');
     streamCtx.stop();
-    showView('lesson');
-  }, '+=0.6');
+    const built = await buildPromise;
+    if (built && built.lessons && built.lessons.length) {
+      state.generatedModule = built;
+      state.currentLesson = null;
+    }
+    // After generation: returning users go straight to lesson;
+    // anonymous users must create an account to save progress.
+    if (Auth.isLoggedIn()) {
+      showView('lesson');
+    } else {
+      showView('auth-signup');
+    }
+  }, '+=0.4');
 }
 
 function startStreamCanvas(canvas) {
@@ -544,6 +622,14 @@ function startStreamCanvas(canvas) {
 // LESSON
 // =========================================================
 function initLesson() {
+  // Reset per-lesson state so the Joc tab fetches a fresh game each
+  // time the user enters a different lesson.
+  _miniGameLoaded = false;
+  const mgHost = $('#minigameHost');
+  if (mgHost) {
+    mgHost.innerHTML = '<div class="minigame-empty muted">Wispucci pregătește un joc scurt pentru această lecție…</div>';
+  }
+
   $$('.lesson-card .tab').forEach(tab => {
     if (tab.dataset.bound) return;
     tab.dataset.bound = '1';
@@ -552,10 +638,10 @@ function initLesson() {
       $$('.lesson-card .tab').forEach(x => x.classList.toggle('is-active', x === tab));
       $$('.lesson-card .tab-pane').forEach(p => p.classList.toggle('is-active', p.dataset.pane === t));
       gsap.from('.tab-pane.is-active', { opacity: 0, y: 6, duration: .35, ease: 'power2.out' });
+      if (t === 'game') ensureMiniGameLoaded();
     });
   });
 
-  // Initial paint of progress
   $('#progressFill').style.width = state.progress + '%';
   $('#progressPct').textContent = state.progress + '%';
 
@@ -574,9 +660,6 @@ function initLesson() {
       }
       gsap.fromTo('.lesson-card', { x: 0 }, { x: -8, duration: .15, yoyo: true, repeat: 1, ease: 'power1.inOut' });
       if (state.progress >= 100) {
-        Store.get().xpToday += 47;
-        Store.get().xpTotal += 47;
-        Store.save();
         celebrate();
       }
     });
@@ -614,9 +697,6 @@ function initLesson() {
         setOrbState('celebrating');
         orbBubble('Exact. Ți-ai prins ideea.');
         showToast('+12 XP · răspuns corect', '✓');
-        Store.get().xpToday += 12;
-        Store.get().xpTotal += 12;
-        Store.save();
         setTimeout(() => setOrbState('happy'), 1200);
       } else if (!va || !vb) {
         setOrbState('confused');
@@ -662,6 +742,263 @@ function orbBubble(text) {
 }
 
 // =========================================================
+// MINI-GAMES — Bug Hunter, Code Assemble, Output Predict, Word Match
+// =========================================================
+const sampleGames = {
+  bug_hunter: {
+    type: 'bug_hunter',
+    prompt: 'Una din linii are un bug. Apasă pe ea.',
+    lines: [
+      "def saluta(nume):",
+      "    print(f'Salut, {nume}!')",
+      "saluta(Ana)",
+    ],
+    buggy_index: 2,
+    fix: "saluta('Ana')",
+  },
+  code_assemble: {
+    type: 'code_assemble',
+    prompt: 'Pune liniile în ordinea corectă pentru a printa „Salut, Ana!".',
+    blocks: [
+      "    print(f'Salut, {nume}!')",
+      "saluta('Ana')",
+      "def saluta(nume):",
+    ],
+    correct_order: [2, 0, 1],
+  },
+  output_predict: {
+    type: 'output_predict',
+    prompt: 'Ce printează codul de mai jos?',
+    code: "x = [1,2,3]\nprint(x[1] * 2)",
+    options: ['2', '4', '6', 'eroare'],
+    answer: 1,
+  },
+};
+
+let _miniGameLoaded = false;
+async function ensureMiniGameLoaded(force = false) {
+  if (_miniGameLoaded && !force) return;
+  _miniGameLoaded = true;
+  const host = $('#minigameHost');
+  if (!host) return;
+  let game = null;
+  if (state.currentLesson?.id && Auth.isLoggedIn()) {
+    try {
+      game = await api.miniGame(state.currentLesson.id, 'auto');
+    } catch (_) { /* fallthrough */ }
+  }
+  if (!game || !game.type) {
+    const keys = Object.keys(sampleGames);
+    game = sampleGames[keys[Math.floor(Math.random() * keys.length)]];
+  }
+  renderMiniGame(host, game);
+}
+
+function renderMiniGame(host, game) {
+  host.innerHTML = '';
+  const type = game.type;
+  if (type === 'bug_hunter') return renderBugHunter(host, game);
+  if (type === 'code_assemble') return renderCodeAssemble(host, game);
+  if (type === 'output_predict') return renderOutputPredict(host, game);
+  if (type === 'word_match') return renderWordMatch(host, game);
+  host.innerHTML = '<p class="muted">Tip de joc necunoscut.</p>';
+}
+
+function renderBugHunter(host, game) {
+  const wrap = document.createElement('div');
+  wrap.className = 'mg mg-bug';
+  wrap.innerHTML = `
+    <div class="mg-head">
+      <span class="mg-tag">🐞 bug hunter</span>
+      <span class="mg-prompt">${escapeHtml(game.prompt || 'Găsește bug-ul.')}</span>
+    </div>
+    <pre class="mg-code"><code id="bugLines"></code></pre>
+    <p class="mg-feedback muted small" id="bugFb">apasă pe linia greșită.</p>
+  `;
+  host.appendChild(wrap);
+  const codeEl = wrap.querySelector('#bugLines');
+  game.lines.forEach((ln, idx) => {
+    const span = document.createElement('span');
+    span.className = 'mg-line';
+    span.textContent = ln + '\n';
+    span.addEventListener('click', () => {
+      const fb = wrap.querySelector('#bugFb');
+      if (idx === game.buggy_index) {
+        span.classList.add('is-correct');
+        fb.innerHTML = `<b>Da.</b> Linia ${idx + 1} avea bug. Corectă: <code>${escapeHtml(game.fix || '')}</code>`;
+        showToast('+15 XP · bug găsit', '✓');
+        setOrbState('celebrating');
+        setTimeout(() => setOrbState('happy'), 1000);
+      } else {
+        span.classList.add('is-wrong');
+        fb.textContent = 'Hmm, asta e ok. Mai uită-te.';
+        setOrbState('confused');
+      }
+    });
+    codeEl.appendChild(span);
+  });
+}
+
+function renderCodeAssemble(host, game) {
+  const order = (game.correct_order || []).slice();
+  const wrap = document.createElement('div');
+  wrap.className = 'mg mg-assemble';
+  wrap.innerHTML = `
+    <div class="mg-head">
+      <span class="mg-tag">🧩 code assemble</span>
+      <span class="mg-prompt">${escapeHtml(game.prompt || 'Pune blocurile în ordinea corectă.')}</span>
+    </div>
+    <ol class="mg-blocks" id="asmBlocks"></ol>
+    <button class="btn btn-primary mg-check" id="asmCheck">Verifică ordinea</button>
+    <p class="mg-feedback muted small" id="asmFb"></p>
+  `;
+  host.appendChild(wrap);
+  const ol = wrap.querySelector('#asmBlocks');
+  // Shuffle for play
+  const indices = game.blocks.map((_, i) => i);
+  shuffleInPlace(indices);
+  indices.forEach(i => {
+    const li = document.createElement('li');
+    li.className = 'mg-block';
+    li.draggable = true;
+    li.dataset.idx = i;
+    li.textContent = game.blocks[i];
+    li.addEventListener('dragstart', (e) => {
+      li.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', String(i));
+    });
+    li.addEventListener('dragend', () => li.classList.remove('dragging'));
+    li.addEventListener('dragover', (e) => e.preventDefault());
+    li.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const dragged = ol.querySelector('.dragging');
+      if (dragged && dragged !== li) {
+        const rect = li.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < rect.height / 2;
+        ol.insertBefore(dragged, before ? li : li.nextSibling);
+      }
+    });
+    ol.appendChild(li);
+  });
+  wrap.querySelector('#asmCheck').addEventListener('click', () => {
+    const cur = $$('.mg-block', ol).map(li => +li.dataset.idx);
+    const expected = order.length ? order : indices;
+    const fb = wrap.querySelector('#asmFb');
+    if (JSON.stringify(cur) === JSON.stringify(expected)) {
+      fb.textContent = 'Ordine perfectă. Asta-i fluxul.';
+      $$('.mg-block', ol).forEach(li => li.classList.add('is-correct'));
+      showToast('+18 XP · cod în ordine', '✓');
+      setOrbState('celebrating');
+      setTimeout(() => setOrbState('happy'), 1000);
+    } else {
+      fb.textContent = 'Aproape — uită-te ce-ar fi rulat primul.';
+      setOrbState('confused');
+    }
+  });
+}
+
+function renderOutputPredict(host, game) {
+  const wrap = document.createElement('div');
+  wrap.className = 'mg mg-predict';
+  wrap.innerHTML = `
+    <div class="mg-head">
+      <span class="mg-tag">⚡ output predict</span>
+      <span class="mg-prompt">${escapeHtml(game.prompt || 'Ce printează codul?')}</span>
+    </div>
+    <pre class="mg-code"><code>${escapeHtml(game.code || '')}</code></pre>
+    <div class="mg-options"></div>
+    <p class="mg-feedback muted small" id="predFb"></p>
+  `;
+  host.appendChild(wrap);
+  const opts = wrap.querySelector('.mg-options');
+  game.options.forEach((opt, i) => {
+    const b = document.createElement('button');
+    b.className = 'mg-option';
+    b.textContent = opt;
+    b.addEventListener('click', () => {
+      const fb = wrap.querySelector('#predFb');
+      if (i === game.answer) {
+        b.classList.add('is-correct');
+        fb.textContent = 'Exact. Bine văzut.';
+        showToast('+10 XP · output corect', '✓');
+        setOrbState('celebrating');
+        setTimeout(() => setOrbState('happy'), 1000);
+      } else {
+        b.classList.add('is-wrong');
+        fb.textContent = 'Nu, încearcă altă opțiune.';
+        setOrbState('confused');
+      }
+    });
+    opts.appendChild(b);
+  });
+}
+
+function renderWordMatch(host, game) {
+  const wrap = document.createElement('div');
+  wrap.className = 'mg mg-match';
+  wrap.innerHTML = `
+    <div class="mg-head">
+      <span class="mg-tag">🔁 word match</span>
+      <span class="mg-prompt">${escapeHtml(game.prompt || 'Potrivește perechile.')}</span>
+    </div>
+    <div class="mg-pairs"></div>
+    <p class="mg-feedback muted small" id="matchFb"></p>
+  `;
+  host.appendChild(wrap);
+  const pairsHost = wrap.querySelector('.mg-pairs');
+  const left = game.pairs.map(p => p[0]);
+  const right = game.pairs.map(p => p[1]).slice();
+  shuffleInPlace(right);
+  let chosenLeft = null;
+  left.forEach((l, i) => {
+    const lBtn = document.createElement('button');
+    lBtn.className = 'mg-match-cell';
+    lBtn.textContent = l;
+    lBtn.dataset.side = 'L';
+    lBtn.dataset.i = i;
+    lBtn.addEventListener('click', () => {
+      $$('.mg-match-cell[data-side="L"]', pairsHost).forEach(x => x.classList.remove('is-on'));
+      lBtn.classList.add('is-on');
+      chosenLeft = i;
+    });
+    pairsHost.appendChild(lBtn);
+  });
+  right.forEach((r) => {
+    const rBtn = document.createElement('button');
+    rBtn.className = 'mg-match-cell';
+    rBtn.textContent = r;
+    rBtn.dataset.side = 'R';
+    rBtn.addEventListener('click', () => {
+      if (chosenLeft === null) return;
+      const expected = game.pairs[chosenLeft][1];
+      const fb = wrap.querySelector('#matchFb');
+      if (rBtn.textContent === expected) {
+        rBtn.classList.add('is-correct');
+        $$('.mg-match-cell.is-on[data-side="L"]', pairsHost).forEach(x => {
+          x.classList.add('is-correct');
+          x.disabled = true;
+        });
+        rBtn.disabled = true;
+        fb.textContent = 'Exact.';
+        chosenLeft = null;
+      } else {
+        rBtn.classList.add('is-wrong');
+        setTimeout(() => rBtn.classList.remove('is-wrong'), 600);
+        fb.textContent = 'Nu, mai încearcă.';
+      }
+    });
+    pairsHost.appendChild(rBtn);
+  });
+}
+
+function shuffleInPlace(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+}
+
+// =========================================================
 // "Explică-mi" microinteraction
 // =========================================================
 const chip = $('#explainChip');
@@ -671,29 +1008,31 @@ let lastSelectedText = '';
 
 document.addEventListener('selectionchange', () => {
   const sel = window.getSelection();
-  if (!sel || sel.isCollapsed) { chip.classList.remove('is-on'); return; }
+  if (!sel || sel.isCollapsed) { chip?.classList.remove('is-on'); return; }
   const text = sel.toString().trim();
-  if (text.length < 2) { chip.classList.remove('is-on'); return; }
+  if (text.length < 2) { chip?.classList.remove('is-on'); return; }
   const range = sel.getRangeAt(0);
   const node = range.commonAncestorContainer;
   const lessonCard = (node.nodeType === 1 ? node : node.parentElement)?.closest?.('.lesson-card');
-  if (!lessonCard) { chip.classList.remove('is-on'); return; }
+  if (!lessonCard) { chip?.classList.remove('is-on'); return; }
   const rect = range.getBoundingClientRect();
   if (!rect || rect.width === 0) return;
   lastSelectionRect = rect;
   lastSelectedText = text;
-  chip.style.left = (rect.left + rect.width / 2) + 'px';
-  chip.style.top  = (rect.top + window.scrollY) + 'px';
-  chip.classList.add('is-on');
+  if (chip) {
+    chip.style.left = (rect.left + rect.width / 2) + 'px';
+    chip.style.top  = (rect.top + window.scrollY) + 'px';
+    chip.classList.add('is-on');
+  }
 });
 
-chip.addEventListener('click', () => {
+chip?.addEventListener('click', () => {
   chip.classList.remove('is-on');
   showExplainPopover(lastSelectionRect, lastSelectedText);
 });
 
 function showExplainPopover(rect, text) {
-  if (!rect) return;
+  if (!rect || !popover) return;
   popover.classList.add('is-on');
   const pw = 360;
   let left = rect.left + rect.width / 2 - pw / 2;
@@ -722,7 +1061,7 @@ function setExplain(mode, text) {
   $('#explainBody').innerHTML = body;
 }
 
-popover.addEventListener('click', (e) => {
+popover?.addEventListener('click', (e) => {
   const pill = e.target.closest('.pill[data-mode]');
   if (pill) {
     $$('.explain-pills .pill').forEach(p => p.classList.toggle('is-on', p === pill));
@@ -730,36 +1069,14 @@ popover.addEventListener('click', (e) => {
   }
 });
 
-$('#explainClose').addEventListener('click', () => {
+$('#explainClose')?.addEventListener('click', () => {
   popover.classList.remove('is-on');
   setOrbState('idle');
   orbBubble('Spune „Explică-mi" dacă ceva nu e clar.');
 });
 
-$('#saveWord').addEventListener('click', () => {
-  const btn = $('#saveWord');
-  const word = (lastSelectedText || '').trim();
-  if (!word) {
-    showToast('selectează un cuvânt mai întâi', '!');
-    return;
-  }
-  const data = Store.get();
-  const id = 'custom_' + word.toLowerCase().replace(/[^a-z0-9ăâîșț]+/gi, '_').slice(0, 32);
-  if (!data.customWords.find(w => w.id === id)) {
-    data.customWords.unshift({
-      id,
-      word: word.length > 32 ? word.slice(0, 32) + '…' : word,
-      def: 'Salvat din lecție. Apasă ca să vezi explicația când revii.',
-      tag: 'new',
-      source: 'M2 · L4',
-      addedAt: Date.now(),
-    });
-    Store.save();
-  }
-  refreshVocabCounters();
-  btn.textContent = '✓ Salvat în vocabular';
-  showToast('salvat în vocabular', '+');
-  setTimeout(() => { btn.textContent = '+ Salvează în vocabular'; }, 1800);
+$('#saveWord')?.addEventListener('click', () => {
+  showToast('salvat în Statistica', '+');
 });
 
 // =========================================================
@@ -772,16 +1089,14 @@ function celebrate() {
   overlay.classList.add('is-on');
   gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: .25 });
   gsap.fromTo('.celebrate-card', { scale: .92, y: 12, opacity: 0 }, { scale: 1, y: 0, opacity: 1, duration: .6, ease: 'back.out(1.6)' });
-
   moveOrbToHost('celebrate', { duration: .6 });
   setOrbState('celebrating');
-
   if (celebrateFx) celebrateFx.stop();
   celebrateFx = startCelebrateFx($('#celebrateFx'));
 }
 
-$('#celebrateClose').addEventListener('click', closeCelebrate);
-$('#celebrateNext').addEventListener('click',  closeCelebrate);
+$('#celebrateClose')?.addEventListener('click', closeCelebrate);
+$('#celebrateNext')?.addEventListener('click',  closeCelebrate);
 
 function closeCelebrate() {
   const overlay = $('#celebrate');
@@ -792,15 +1107,6 @@ function closeCelebrate() {
     setOrbState('idle');
   }});
 }
-
-$('#triggerCelebrate').addEventListener('click', () => {
-  if (state.view !== 'lesson') {
-    showView('lesson');
-    setTimeout(celebrate, 700);
-  } else {
-    celebrate();
-  }
-});
 
 function startCelebrateFx(canvas) {
   const ctx = canvas.getContext('2d');
@@ -814,13 +1120,11 @@ function startCelebrateFx(canvas) {
   resize();
   let W = canvas.offsetWidth, H = canvas.offsetHeight;
   let cx = W / 2, cy = H / 2;
-
   const waves = [
     { r: 30, a: 0.5, w: 6, life: 0,   maxLife: 130 },
     { r: 30, a: 0.32, w: 4, life: -40, maxLife: 160 },
     { r: 30, a: 0.22, w: 3, life: -80, maxLife: 190 },
   ];
-
   const embers2 = Array.from({ length: 130 }, () => ({
     x: Math.random() * W,
     y: -Math.random() * H * 0.5,
@@ -832,12 +1136,10 @@ function startCelebrateFx(canvas) {
     color: Math.random() < .35 ? '#FFFFD9' : '#EFDD8D',
     life: 0,
   }));
-
   function draw() {
     if (stopped) return;
     ctx.clearRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'lighter';
-
     waves.forEach(w => {
       w.life += 1;
       if (w.life > 0) {
@@ -852,7 +1154,6 @@ function startCelebrateFx(canvas) {
       }
       if (w.life > w.maxLife) { w.life = -10 - Math.random() * 30; }
     });
-
     embers2.forEach(p => {
       p.x += p.vx + Math.sin(p.life * 0.02) * 0.3;
       p.y += p.vy;
@@ -868,128 +1169,176 @@ function startCelebrateFx(canvas) {
       ctx.fillStyle = `rgba(255, 246, 204, ${alpha})`;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 0.5, 0, Math.PI * 2); ctx.fill();
     });
-
     ctx.globalCompositeOperation = 'source-over';
     requestAnimationFrame(draw);
   }
   draw();
-
   return { stop() { stopped = true; ctx.clearRect(0,0,W,H); } };
-}
-
-// =========================================================
-// VOCABULAR
-// =========================================================
-const VOCAB_WORDS = [
-  { id: 'param',     word: 'parametru',     def: 'Variabilă locală a unei funcții, legată la apel de un argument.', tag: 'review',  source: 'M2 · L4', code: 'def f(<b>x</b>):' },
-  { id: 'arg',       word: 'argument',      def: 'Valoarea pe care o dai funcției la apel (umpli „cutia" parametrului).', tag: 'review', source: 'M2 · L4', code: 'f(<b>5</b>)' },
-  { id: 'fstring',   word: 'f-string',      def: 'String cu interpolare: pune variabile direct între acolade.', tag: 'review',  source: 'M2 · L3', code: 'f"Salut, {nume}!"' },
-  { id: 'scope',     word: 'scope',         def: 'Zona în care o variabilă există. Local funcției ≠ global.',         tag: 'new',     source: 'M2 · L4', code: 'def f(): x = 1' },
-  { id: 'return',    word: 'return',        def: 'Trimite o valoare înapoi din funcție și oprește execuția.',          tag: 'new',     source: 'M2 · L3', code: 'return x*2' },
-  { id: 'list',      word: 'listă',         def: 'Colecție ordonată, mutabilă, indexată de la 0.',                      tag: 'known',   source: 'M2 · L1', code: '[1, 2, 3]' },
-  { id: 'dict',      word: 'dicționar',     def: 'Pereche cheie → valoare. Cheie unică, valoare orice.',                tag: 'known',   source: 'M2 · L2', code: "{'a': 1}" },
-  { id: 'tuple',     word: 'tuplu',         def: 'Listă imutabilă. O dată fixată, nu se mai schimbă.',                  tag: 'known',   source: 'M2 · L2', code: '(1, 2, 3)' },
-  { id: 'iter',      word: 'iterator',      def: 'Obiect care produce valori una câte una pe „next()".',                tag: 'new',     source: 'M3 · L1', code: 'iter([1,2])' },
-  { id: 'comp',      word: 'comprehension', def: 'Mod compact de a construi liste/dict/seturi.',                        tag: 'new',     source: 'M3 · L1', code: '[x*2 for x in xs]' },
-  { id: 'lambda',    word: 'lambda',        def: 'Funcție mică fără nume, definită inline.',                             tag: 'review',  source: 'M3 · L2', code: 'lambda x: x+1' },
-  { id: 'recursion', word: 'recursie',      def: 'Funcție care se cheamă pe ea însăși până la cazul de bază.',           tag: 'review',  source: 'M3 · L3', code: 'def f(n): return f(n-1)' },
-  { id: 'closure',   word: 'closure',       def: 'Funcție care „își amintește" variabilele din contextul în care a fost creată.', tag: 'new', source: 'M3 · L4', code: 'def outer(): x=1; def inner(): print(x); return inner' },
-  { id: 'mutable',   word: 'mutabil',       def: 'Obiect care se poate modifica după creare (listă, dict).',           tag: 'known',   source: 'M2 · L2', code: 'l.append(4)' },
-  { id: 'immutable', word: 'imutabil',      def: 'Obiect care nu se poate modifica (string, tuplu, int).',              tag: 'known',   source: 'M2 · L2', code: 's = "abc"' },
-  { id: 'try',       word: 'try / except',  def: 'Prinzi o eroare în loc să crape programul.',                          tag: 'review',  source: 'M4 · L1', code: 'try: ... except: ...' },
-  { id: 'class',     word: 'clasă',         def: 'Șablon care produce obiecte cu date și comportament.',                 tag: 'new',     source: 'M5 · L1', code: 'class Cat: ...' },
-  { id: 'inh',       word: 'moștenire',     def: 'O clasă preia comportamentul alteia și-l extinde.',                    tag: 'new',     source: 'M5 · L2', code: 'class Dog(Animal): ...' },
-];
-
-let activeVocabFilter = 'all';
-
-function refreshVocabCounters() {
-  const data = Store.get();
-  const total = VOCAB_WORDS.length + (data.customWords || []).length;
-  $$('[data-vocab-total]').forEach(el => { el.textContent = total; });
-}
-
-function renderVocab() {
-  const grid = $('#vocabGrid');
-  const empty = $('#vocabEmpty');
-  if (!grid) return;
-
-  const data = Store.get();
-  const known = new Set(data.knownWords || []);
-  const all = [
-    ...(data.customWords || []),
-    ...VOCAB_WORDS,
-  ].map(w => ({ ...w, tag: known.has(w.id) ? 'known' : (w.tag || 'new') }));
-
-  const search = ($('#vocabSearch')?.value || '').trim().toLowerCase();
-  const filtered = all.filter(w => {
-    if (activeVocabFilter !== 'all' && w.tag !== activeVocabFilter) return false;
-    if (search) {
-      const blob = (w.word + ' ' + w.def).toLowerCase();
-      if (!blob.includes(search)) return false;
-    }
-    return true;
-  });
-
-  grid.innerHTML = '';
-  if (filtered.length === 0) {
-    empty?.removeAttribute('hidden');
-    return;
-  }
-  empty?.setAttribute('hidden', '');
-
-  const tagLabel = { new: 'nou', review: 'de reluat', known: 'știut' };
-  filtered.forEach(w => {
-    const card = document.createElement('div');
-    card.className = 'vocab-card' + (w.tag === 'known' ? ' is-known' : '');
-    card.innerHTML = `
-      <span class="vocab-word">${escapeHtml(w.word)}</span>
-      <span class="vocab-def">${w.def}${w.code ? ` <code>${w.code}</code>` : ''}</span>
-      <span class="vocab-meta">
-        <span class="vocab-tag tag-${w.tag}">${tagLabel[w.tag] || w.tag}</span>
-        <span class="vocab-source">${w.source || ''}</span>
-        <button class="vocab-known-btn" data-known-id="${w.id}">${w.tag === 'known' ? '✓ știu' : 'știu'}</button>
-      </span>
-    `;
-    card.querySelector('.vocab-known-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      const data = Store.get();
-      const set = new Set(data.knownWords || []);
-      if (set.has(w.id)) set.delete(w.id);
-      else set.add(w.id);
-      data.knownWords = Array.from(set);
-      Store.save();
-      renderVocab();
-      showToast(set.has(w.id) ? `„${w.word}" marcat ca știut` : `„${w.word}" e iar de reluat`, '✓');
-    });
-    card.addEventListener('click', () => {
-      showToast(`${w.word}: ${w.def.slice(0, 70)}${w.def.length > 70 ? '…' : ''}`, 'i');
-    });
-    grid.appendChild(card);
-  });
 }
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// Wire vocab toolbar
-window.addEventListener('DOMContentLoaded', () => {
-  const search = $('#vocabSearch');
-  if (search) {
-    search.addEventListener('input', () => renderVocab());
+// =========================================================
+// STATISTICA — fetches /api/me/stats + leaderboard
+// =========================================================
+async function renderStats() {
+  if (!Auth.isLoggedIn()) return;
+  let stats;
+  try {
+    stats = await api.stats();
+    state.statsCache = stats;
+  } catch (err) {
+    showToast('nu pot lua statistica acum', '!');
+    return;
   }
-  const filters = $('#vocabFilters');
-  if (filters) {
-    filters.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-vfilter]');
-      if (!b) return;
-      $$('[data-vfilter]', filters).forEach(x => x.classList.toggle('is-on', x === b));
-      activeVocabFilter = b.dataset.vfilter;
-      renderVocab();
+  $$('[data-stat-streak]').forEach(el => el.textContent = stats.streak.current);
+  $$('[data-stat-longest]').forEach(el => el.textContent = stats.streak.longest);
+  $$('[data-stat-xp-week]').forEach(el => el.textContent = stats.xp.week);
+  $$('[data-stat-xp-today]').forEach(el => el.textContent = stats.xp.today);
+  $$('[data-stat-xp-total]').forEach(el => el.textContent = stats.xp.total);
+  $$('[data-stat-mastered]').forEach(el => el.textContent = stats.mastered.total);
+  $$('[data-stat-mastered-new]').forEach(el => el.textContent = stats.mastered.new_today);
+  const totalDone = (stats.lessons.by_subject || []).reduce((s, x) => s + (x.completed || 0), 0);
+  const inProg    = (stats.lessons.by_subject || []).reduce((s, x) => s + (x.in_progress || 0), 0);
+  $$('[data-stat-lessons-done]').forEach(el => el.textContent = totalDone);
+  $$('[data-stat-lessons-progress]').forEach(el => el.textContent = inProg);
+
+  // Heatmap
+  const hm = $('#heatmap');
+  hm.innerHTML = '';
+  const xps = stats.heatmap.map(d => d.xp);
+  const maxXp = Math.max(40, ...xps);
+  stats.heatmap.forEach(d => {
+    const cell = document.createElement('div');
+    cell.className = 'heat-cell';
+    const intensity = d.xp <= 0 ? 0 : Math.min(1, d.xp / maxXp);
+    cell.style.setProperty('--heat', intensity.toFixed(2));
+    cell.title = `${d.day} · ${d.xp} XP`;
+    hm.appendChild(cell);
+  });
+
+  // Subject breakdown
+  const sb = $('#subjectBreakdown');
+  sb.innerHTML = '';
+  if (!stats.lessons.by_subject.length) {
+    sb.innerHTML = '<div class="muted small subject-empty">Începi un curs · statistica apare aici.</div>';
+  } else {
+    stats.lessons.by_subject.forEach(s => {
+      const card = document.createElement('div');
+      card.className = 'subject-card';
+      const total = (s.completed || 0) + (s.in_progress || 0);
+      const pct = total ? Math.round(((s.completed || 0) / total) * 100) : 0;
+      card.innerHTML = `
+        <div class="subject-name">${escapeHtml(s.subject)}</div>
+        <div class="subject-bar"><i style="width:${pct}%"></i></div>
+        <div class="subject-meta muted small">${s.completed} terminate · ${s.in_progress} în progres</div>
+      `;
+      sb.appendChild(card);
     });
   }
+
+  // Mastered concepts grid
+  const grid = $('#masteredGrid');
+  const empty = $('#masteredEmpty');
+  const recent = stats.mastered.recent || [];
+  if (recent.length) {
+    empty.style.display = 'none';
+    grid.innerHTML = '';
+    const tagLabel = { new: 'nou', review: 'de reluat', known: 'știut' };
+    recent.forEach(w => {
+      const el = document.createElement('div');
+      el.className = 'vocab-card' + (w.tag === 'known' ? ' is-known' : '');
+      el.innerHTML = `
+        <span class="vocab-word">${escapeHtml(w.label)}</span>
+        <span class="vocab-def">${escapeHtml(w.definition || '')}${w.code_example ? ` <code>${escapeHtml(w.code_example)}</code>` : ''}</span>
+        <span class="vocab-meta">
+          <span class="vocab-tag tag-${w.tag}">${tagLabel[w.tag] || w.tag}</span>
+          <span class="vocab-source">${escapeHtml(w.source_lesson_id || '')}</span>
+        </span>`;
+      grid.appendChild(el);
+    });
+  } else {
+    grid.innerHTML = '';
+    empty.style.display = '';
+  }
+
+  // Leaderboard
+  await renderLeaderboard(state.leaderboardPeriod);
+}
+
+async function renderLeaderboard(period = 'weekly') {
+  state.leaderboardPeriod = period;
+  $$('#leaderboardToggle .filter-pill').forEach(b => b.classList.toggle('is-on', b.dataset.period === period));
+  let lb;
+  try {
+    lb = await api.leaderboard(period);
+  } catch (_) {
+    return;
+  }
+  const ol = $('#leaderboard');
+  ol.innerHTML = '';
+  if (!lb.top.length) {
+    ol.innerHTML = '<li class="leaderboard-empty muted small">Încă nimeni în top — fii primul.</li>';
+  } else {
+    lb.top.forEach(row => {
+      const li = document.createElement('li');
+      li.className = 'leaderboard-row' + (row.is_me ? ' is-me' : '');
+      li.innerHTML = `
+        <span class="lb-rank">#${row.rank}</span>
+        <span class="lb-name">${escapeHtml(row.display_name)}</span>
+        <span class="lb-streak">🔥 ${row.streak_days || 0}</span>
+        <span class="lb-xp">${row.xp} XP</span>
+      `;
+      ol.appendChild(li);
+    });
+  }
+  const me = $('#leaderboardMe');
+  if (lb.me && lb.me.rank && !lb.me.in_top) {
+    me.hidden = false;
+    me.innerHTML = `
+      <div class="leaderboard-row is-me">
+        <span class="lb-rank">#${lb.me.rank}</span>
+        <span class="lb-name">${escapeHtml(lb.me.display_name)} (tu)</span>
+        <span class="lb-streak">🔥 ${lb.me.streak_days || 0}</span>
+        <span class="lb-xp">${lb.me.xp} XP</span>
+      </div>`;
+  } else {
+    me.hidden = true;
+  }
+}
+
+$('#leaderboardToggle')?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-period]');
+  if (!b) return;
+  renderLeaderboard(b.dataset.period);
 });
+
+$('#masteredSearch')?.addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  $$('#masteredGrid .vocab-card').forEach(card => {
+    const txt = card.textContent.toLowerCase();
+    card.style.display = (!q || txt.includes(q)) ? '' : 'none';
+  });
+});
+
+// =========================================================
+// HOME — refresh dynamic content from latest stats
+// =========================================================
+async function refreshHome() {
+  if (!Auth.isLoggedIn()) return;
+  let stats;
+  try { stats = await api.stats(); state.statsCache = stats; }
+  catch (_) { return; }
+  $$('[data-streak]').forEach(el => el.textContent = stats.streak.current);
+  $$('[data-mastered-total]').forEach(el => el.textContent = stats.mastered.total);
+  $$('[data-mastered-new]').forEach(el => el.textContent = stats.mastered.new_today);
+  // Avatar initial
+  const u = Auth.user;
+  const initial = (u && u.name && u.name[0]) ? u.name[0].toUpperCase() : '?';
+  $$('[data-avatar]').forEach(el => el.textContent = initial);
+}
 
 // =========================================================
 // SETTINGS
@@ -998,7 +1347,6 @@ function initSettingsView() {
   const data = Store.get();
   const s = data.settings;
 
-  // Toggles
   $$('.toggle-input[data-setting]').forEach(input => {
     const key = input.dataset.setting;
     input.checked = !!s[key];
@@ -1008,11 +1356,11 @@ function initSettingsView() {
       s[key] = input.checked;
       Store.save();
       applySettings();
+      pushSettings();
       showToast(input.checked ? 'pornit' : 'oprit', '✓');
     });
   });
 
-  // Segmented pickers
   $$('.seg-picker[data-setting]').forEach(seg => {
     const key = seg.dataset.setting;
     $$('button[data-val]', seg).forEach(b => {
@@ -1027,11 +1375,11 @@ function initSettingsView() {
       s[key] = b.dataset.val;
       Store.save();
       applySettings();
+      pushSettings();
       showToast(`${key} → ${b.dataset.val}`, '✓');
     });
   });
 
-  // Slider
   const slider = $('#setEmbers');
   const valEl = $('#embersValue');
   if (slider) {
@@ -1046,22 +1394,31 @@ function initSettingsView() {
       });
       slider.addEventListener('change', () => {
         Store.save();
+        pushSettings();
       });
     }
   }
 
-  // Reset
-  const reset = $('#resetData');
-  if (reset && !reset.dataset.bound) {
-    reset.dataset.bound = '1';
-    reset.addEventListener('click', () => {
-      Store.reset();
-      applySettings();
-      refreshGlobalUI();
-      initSettingsView();
-      showToast('demo resetat — toate datele șterse', '⟳');
+  const logout = $('#logoutBtn');
+  if (logout && !logout.dataset.bound) {
+    logout.dataset.bound = '1';
+    logout.addEventListener('click', () => {
+      Auth.clear();
+      Store.get().lastView = 'welcome';
+      Store.save();
+      showToast('ai ieșit din cont', '✓');
+      showView('welcome');
     });
   }
+}
+
+let _settingsPushTimer = null;
+function pushSettings() {
+  if (!Auth.isLoggedIn()) return;
+  if (_settingsPushTimer) clearTimeout(_settingsPushTimer);
+  _settingsPushTimer = setTimeout(() => {
+    api.saveSettings(Store.get().settings).catch(() => {});
+  }, 600);
 }
 
 function applySettings() {
@@ -1069,19 +1426,8 @@ function applySettings() {
   document.documentElement.style.setProperty('--embers-opacity', (s.embersIntensity / 100).toFixed(2));
   document.body.classList.toggle('force-focus', !!s.forceFocus);
   document.body.classList.toggle('silent', !!s.silent);
-  // Refresh in-lesson focus toggle
   const focused = state.view === 'lesson' || s.forceFocus;
   document.body.classList.toggle('in-lesson', focused);
-}
-
-// =========================================================
-// GLOBAL UI REFRESH (streak, vocab count, xp)
-// =========================================================
-function refreshGlobalUI() {
-  const data = Store.get();
-  $$('[data-streak]').forEach(el => { el.textContent = data.streak; });
-  $$('[data-xp-total]').forEach(el => { el.textContent = data.xpTotal; });
-  refreshVocabCounters();
 }
 
 // =========================================================
@@ -1109,20 +1455,15 @@ window.addEventListener('DOMContentLoaded', () => {
       pauseBtn.classList.toggle('is-on', pauseEmbersFlag);
       pauseBtn.textContent = pauseEmbersFlag ? 'Reia' : 'Pauză';
       document.body.classList.toggle('embers-paused', pauseEmbersFlag);
-      showToast(pauseEmbersFlag ? 'particule \u00een pauz\u0103' : 'particule reluate', '⏸');
+      showToast(pauseEmbersFlag ? 'particule în pauză' : 'particule reluate', '⏸');
     });
   }
 
-  // Recent items click → switch to lesson
   $$('.recent-item').forEach(el => {
-    el.addEventListener('click', () => {
-      showView('lesson');
-    });
+    el.addEventListener('click', () => showView('lesson'));
   });
-
-  // "Vezi toate" button → vocab page (placeholder)
   $$('.btn-link[data-go-list]').forEach(el => {
-    el.addEventListener('click', () => showView('vocab'));
+    el.addEventListener('click', () => showView('stats'));
   });
 });
 
@@ -1147,12 +1488,23 @@ function showToast(text, icon = '✓') {
 // =========================================================
 window.addEventListener('load', () => {
   applySettings();
-  refreshGlobalUI();
-  refreshVocabCounters();
+  // Place orb at the active view's host (welcome by default).
+  placeOrbInstantlyAt('welcome');
+  setOrbState('idle');
+  window.addEventListener('resize', () => placeOrbInstantlyAt(state.view));
 
-  const last = Store.get().lastView;
-  if (last && last !== 'welcome' && ['home', 'lesson', 'vocab', 'settings'].includes(last)) {
-    // Returning user — go straight to last view (most often home)
-    setTimeout(() => showView(last), 50);
+  gsap.from('.welcome-wrap .display',  { y: 24, opacity: 0, duration: .9, delay: .3, ease: 'power3.out' });
+  gsap.from('.welcome-wrap .lead',     { y: 14, opacity: 0, duration: .8, delay: .55, ease: 'power3.out' });
+  gsap.from('.welcome-wrap .btn',      { y: 10, opacity: 0, duration: .7, delay: .75, ease: 'power3.out' });
+  gsap.from('.welcome-wrap .footnote', { opacity: 0, duration: .6, delay: .95 });
+
+  // Returning user → resume at last protected view if logged in
+  if (Auth.isLoggedIn()) {
+    const last = Store.get().lastView;
+    if (last && PROTECTED_VIEWS.has(last)) {
+      setTimeout(() => showView(last), 50);
+    } else {
+      setTimeout(() => showView('home'), 50);
+    }
   }
 });

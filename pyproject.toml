@@ -1,0 +1,22 @@
+[project]
+name = "wispucci-backend"
+version = "0.1.0"
+description = "Wispucci tutor AI — FastAPI backend"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi[standard]>=0.115,<1.0",
+  "uvicorn[standard]>=0.30",
+  "sqlalchemy[asyncio]>=2.0",
+  "aiosqlite>=0.20",
+  "asyncpg>=0.30",
+  "python-jose[cryptography]>=3.3",
+  "passlib[bcrypt]>=1.7",
+  "bcrypt>=4.0,<5.0",
+  "pydantic[email]>=2.0",
+  "sse-starlette>=2.0",
+  "httpx>=0.27",
+  "python-dotenv>=1.0",
+]
+
+[tool.devin.deploy]
+app = "backend.main:app"
