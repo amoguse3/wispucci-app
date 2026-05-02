@@ -1504,20 +1504,56 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
    RESPONSIVE
 =========================================================================== */
 
-/* Wide PC (1440+) — keep content from feeling lost */
+/* ---- Wide PC (1280+) ---- baseline padding/centering ---- */
 @media (min-width: 1280px) {
   .ob-body { max-width: 1100px; }
   .lesson-grid { grid-template-columns: 320px 1fr; max-width: 1280px; margin: 0 auto; width: 100%; }
   .welcome-wrap { max-width: 820px; }
+  /* Side-padding scales with viewport so topnav / ctxbar / lesson-progress
+     don't hug the edges on wide monitors but also never crush content on
+     narrower ones. Was a max(calc(...)) that created visual gaps between
+     1500-1900px. */
   .topnav, .ctxbar, .lesson-progress {
-    padding-left: max(var(--s-6), calc((100vw - 1440px) / 2 + var(--s-6)));
-    padding-right: max(var(--s-6), calc((100vw - 1440px) / 2 + var(--s-6)));
+    padding-left:  clamp(var(--s-6), 4vw, 96px);
+    padding-right: clamp(var(--s-6), 4vw, 96px);
   }
 }
-@media (min-width: 1600px) {
-  .display { font-size: 72px; }
-  .h1 { font-size: 52px; }
+
+/* ---- Intermediate (1440+) ---- close the gap that used to break
+   between 1280 and 1600 on user's 1500-1900px screen. */
+@media (min-width: 1440px) {
+  .lesson-grid { max-width: 1400px; }
+  .welcome-wrap { max-width: 900px; }
   .ob-body { max-width: 1200px; }
+  .home-body { max-width: 1400px; }
+  .stats-body { max-width: 1400px; margin: 0 auto; }
+}
+
+/* ---- Cinema (1600+) ---- bump display/h1 ---- */
+@media (min-width: 1600px) {
+  .display { font-size: 76px; }
+  .h1 { font-size: 56px; }
+  .ob-body { max-width: 1280px; }
+  .lesson-grid { max-width: 1500px; grid-template-columns: 360px 1fr; }
+  .welcome-wrap { max-width: 960px; }
+  .orb-stage { width: 320px; height: 320px; }
+}
+
+/* ---- Wide-screen (1920+) ---- fill the canvas instead of looking
+   like the layout was designed for a 13" laptop. */
+@media (min-width: 1920px) {
+  .display { font-size: 88px; }
+  .h1 { font-size: 64px; }
+  .lead { font-size: 19px; }
+  .ob-body { max-width: 1360px; }
+  .lesson-grid { max-width: 1620px; grid-template-columns: 400px 1fr; gap: var(--s-7); }
+  .welcome-wrap { max-width: 1040px; gap: var(--s-6); }
+  .orb-stage { width: 360px; height: 360px; }
+  .orb-lesson-host { width: 240px; height: 240px; }
+  .home-body { max-width: 1520px; }
+  .stats-body { max-width: 1520px; }
+  .lesson-title { font-size: 38px; }
+  .lesson-body { font-size: 19px; line-height: 1.7; }
 }
 
 @media (max-width: 900px) {
