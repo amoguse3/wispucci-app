@@ -1363,6 +1363,7 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   font-size: 15px;
   color: var(--text);
   line-height: 1.7;
+  font-family: 'JetBrains Mono', monospace;
   /* Scroll horizontally for long lines, never let flex squish the
      block vertically (it lives inside the lesson tab-pane which is
      a flex column scroll container). */
@@ -1371,6 +1372,31 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   white-space: pre;
   margin: 0;
 }
+/* Editable code block (practice exercises) — themed textarea, no
+   white-on-white. */
+.code.editable {
+  padding: 0;
+}
+.code.editable code {
+  display: block;
+  width: 100%;
+}
+textarea.code-area {
+  display: block;
+  width: 100%;
+  min-height: 140px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  line-height: 1.6;
+  padding: var(--s-4) var(--s-5);
+  resize: vertical;
+  caret-color: var(--accent);
+}
+textarea.code-area::placeholder { color: var(--text-3); }
 .code .blank {
   display: inline-block;
   min-width: 64px;
