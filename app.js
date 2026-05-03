@@ -8,16 +8,36 @@ const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
 // =========================================================
 // API CLIENT (talks to FastAPI backend)
 // =========================================================
-const API_BASE = (() => {
-  // Talk to the backend on the same host. In local dev we serve the
-  // frontend on :8000 (python -m http.server) and the backend on :8801.
+// Backend resolution. In production (devinapps.com static host) we point
+// at the deployed wispucci-backend on fly.io. Override via window.WISPUCCI_API_BASE
+// for tunneled / staging backends. URLs may include "user:pass@host" for
+// HTTP basic auth tunnels — apiFetch strips the creds and sends them as
+// Authorization: Basic instead (Chrome blocks credentials in fetch URLs).
+const _API_RESOLVED = (() => {
   const explicit = window.WISPUCCI_API_BASE;
-  if (explicit) return explicit;
-  if (location.port && location.port !== '8801') {
-    return `${location.protocol}//${location.hostname}:8801`;
+  if (explicit) {
+    try {
+      const u = new URL(explicit);
+      const userinfo = u.username ? `${decodeURIComponent(u.username)}:${decodeURIComponent(u.password)}` : '';
+      const clean = `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '')}`;
+      return { base: clean, basic: userinfo ? btoa(userinfo) : '' };
+    } catch (_) {
+      return { base: explicit, basic: '' };
+    }
   }
-  return location.origin;
+  // Local dev: frontend on :8000/python http.server, backend on :8801/uvicorn.
+  if (location.port && location.port !== '8801') {
+    return { base: `${location.protocol}//${location.hostname}:8801`, basic: '' };
+  }
+  // Static prod: devinapps.com hosts only static files, so fall back to
+  // the fly backend.
+  if (location.hostname.endsWith('.devinapps.com')) {
+    return { base: 'https://wispucci-backend-ezpeqmlb.fly.dev', basic: '' };
+  }
+  return { base: location.origin, basic: '' };
 })();
+const API_BASE = _API_RESOLVED.base;
+const _API_BASIC = _API_RESOLVED.basic;
 
 const Auth = {
   TOKEN_KEY: 'wispucci.token',
@@ -44,6 +64,9 @@ async function apiFetch(path, opts = {}) {
     { 'Content-Type': 'application/json' },
     opts.headers || {},
   );
+  // Basic auth (for tunnel URLs) goes as X-Tunnel-Auth so it doesn't
+  // collide with the bearer token. The CDN will strip it.
+  if (_API_BASIC) headers['X-Tunnel-Auth'] = _API_BASIC;
   if (Auth.token) headers['Authorization'] = `Bearer ${Auth.token}`;
   let resp;
   try {
@@ -78,6 +101,12 @@ const api = {
   login: (body) => apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   me: () => apiFetch('/api/auth/me'),
   buildLesson: (body) => apiFetch('/api/tutor/lesson/build', { method: 'POST', body: JSON.stringify(body) }),
+  // Two-pass generation: outline first (fast, ~2-3s), then per-lesson
+  // content (~5-8s) prefetched in the background while the user reads
+  // lesson 1.
+  buildOutline: (body) => apiFetch('/api/tutor/course/outline', { method: 'POST', body: JSON.stringify(body) }),
+  generateLesson: (lessonId) => apiFetch(`/api/tutor/lesson/${encodeURIComponent(lessonId)}/generate`, { method: 'POST' }),
+  getLesson: (lessonId) => apiFetch(`/api/lessons/${encodeURIComponent(lessonId)}`),
   miniGame: (lessonId, type = 'auto') =>
     apiFetch(`/api/tutor/minigame?lesson_id=${encodeURIComponent(lessonId)}&game_type=${encodeURIComponent(type)}`, { method: 'POST' }),
   miniTest: (moduleId) =>
@@ -288,11 +317,19 @@ function getHostRect(viewName) {
   return $(`[data-orb-host="${viewName}"]`);
 }
 
-function placeOrbInstantlyAt(viewName) {
+function placeOrbInstantlyAt(viewName, _attempt = 0) {
   const host = getHostRect(viewName);
   if (!host) return;
   const r = host.getBoundingClientRect();
-  if (r.width <= 0 || r.height <= 0) return;
+  if (r.width <= 0 || r.height <= 0) {
+    // Host hasn't laid out yet (fonts loading, view just toggled
+    // visible, etc.) — retry on the next frame, capped at ~10 frames
+    // (~160ms) so we never spin forever.
+    if (_attempt < 10) {
+      requestAnimationFrame(() => placeOrbInstantlyAt(viewName, _attempt + 1));
+    }
+    return;
+  }
   gsap.set(orbFlyer, { x: r.left, y: r.top, width: r.width, height: r.height });
 }
 
@@ -306,6 +343,45 @@ function moveOrbToHost(viewName, opts = {}) {
     duration: opts.duration ?? 0.7,
     ease: opts.ease ?? 'power3.inOut',
   });
+}
+
+// Re-anchor orb to its host on scroll/resize WITHOUT animating.
+// The orb-flyer is `position: fixed`, so when the page scrolls the
+// host moves but the orb stays glued to viewport coords — that's why
+// the orb appeared to "drift" over text. We listen on document scroll
+// (capture phase) so we catch scrolls inside any `.view { overflow: auto }`
+// container, and on window resize. rAF-throttled so it stays cheap.
+let __reAnchorRaf = null;
+function scheduleOrbReAnchor() {
+  if (__reAnchorRaf) return;
+  __reAnchorRaf = requestAnimationFrame(() => {
+    __reAnchorRaf = null;
+    if (!state || !state.view) return;
+    const hasOrb = VIEWS_WITH_ORB.has(state.view) || state.view.startsWith('onboarding-');
+    if (!hasOrb) return;
+    // Snap (no tween) — the user explicitly asked that the orb only
+    // animates on view-change, not while scrolling.
+    placeOrbInstantlyAt(state.view);
+  });
+}
+document.addEventListener('scroll', scheduleOrbReAnchor, { capture: true, passive: true });
+window.addEventListener('resize', scheduleOrbReAnchor);
+
+// First-paint defense: when fonts finish loading the page reflows,
+// which used to leave the orb stuck at its pre-font coordinates.
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(scheduleOrbReAnchor).catch(() => {});
+}
+
+// Catch any layout shift (aurora layer, embers canvas resize,
+// font swap, hydration of late-loading content) and re-anchor
+// without animating.
+if (typeof ResizeObserver !== 'undefined') {
+  try {
+    const __orbRO = new ResizeObserver(() => scheduleOrbReAnchor());
+    __orbRO.observe(document.documentElement);
+    if (document.body) __orbRO.observe(document.body);
+  } catch (_e) { /* ignore — fall back to scroll/resize */ }
 }
 
 // =========================================================
@@ -377,7 +453,10 @@ function showView(name) {
   // View-specific init
   if (name === 'stats')    renderStats();
   if (name === 'settings') initSettingsView();
-  if (name === 'lesson')   initLesson();
+  if (name === 'lesson') {
+    initLesson();
+    if (state.currentLesson) applyLessonToView(state.currentLesson);
+  }
   if (name === 'home')     refreshHome();
 
   // Drive orb mood
@@ -490,6 +569,36 @@ function humanError(raw) {
 // =========================================================
 let genTl;
 
+// Distraction copy shown while DeepSeek crunches. Cycles ~every 3.5s
+// so the user always has fresh signal that something is happening.
+const _GEN_FACTS = {
+  Programare: [
+    'știai? Python e numit după Monty Python, nu după șarpe.',
+    'fapt: prima eroare „bug" a fost o molie reală în 1947.',
+    'Stack Overflow are 24M+ de întrebări — toate au început cu „de ce nu merge".',
+    'oamenii citesc cod de 10× mai des decât scriu cod.',
+    'cei mai buni programatori șterg mai mult cod decât scriu.',
+  ],
+  'Limbă străină': [
+    'creierul învață limbi mai bine prin context decât prin tabele.',
+    'cei care vorbesc 2+ limbi iau decizii mai bune (studiu UChicago).',
+    'dacă auzi o limbă 30 min/zi — vezi rezultate în 21 de zile.',
+  ],
+  'Matematică': [
+    '„matematica e limba universului" — Galileo. încă valabil.',
+    'demonstrațiile încep mereu cu „să presupunem că nu". apoi spargem.',
+    'dacă blochezi pe o problemă, plimbarea îți dă răspunsul în 70% din cazuri.',
+  ],
+  Altceva: [
+    'aha-momentul vine când conectezi 2 lucruri știute deja.',
+    'creierul consolidează ce ai învățat în primele 4 ore de somn.',
+  ],
+};
+
+function _genFactsFor(subject) {
+  return _GEN_FACTS[subject] || _GEN_FACTS.Altceva;
+}
+
 async function runGeneration() {
   const items = $$('#genList li');
   const fill = $('#genBarFill');
@@ -502,20 +611,46 @@ async function runGeneration() {
   if (thread) gsap.set(thread, { height: '0%' });
   if (pct) pct.textContent = '0%';
 
+  // Reset placeholder titles so a re-run doesn't show a stale module.
+  items.forEach((li, i) => {
+    const t = li.querySelector('.gen-title');
+    const m = li.querySelector('.gen-meta');
+    const tags = li.querySelector('.gen-tags');
+    const status = li.querySelector('.gen-status-text');
+    if (t) t.textContent = `Lecția ${i + 1}`;
+    if (m) m.textContent = '— · —';
+    if (tags) tags.innerHTML = '<span>…</span>';
+    if (status) status.textContent = 'așteaptă';
+  });
+
   const streamCtx = startStreamCanvas(stream);
 
-  // Kick off the real backend call in parallel with the timeline animation
-  const buildPromise = Auth.isLoggedIn()
-    ? api.buildLesson({
+  // Pass 1 — outline (lightweight, ~2-3s). Anonymous users skip the
+  // backend entirely and the timeline plays as a teaser before signup.
+  const outlinePromise = Auth.isLoggedIn()
+    ? api.buildOutline({
         subject: state.subject,
         topic: state.topic,
         level: state.level,
-        lesson_count: 4,
       }).catch(err => {
-        console.warn('build failed', err);
+        console.warn('outline failed', err);
         return null;
       })
     : Promise.resolve(null);
+
+  // Distraction: rotate fun facts in the gen-head subtitle while we wait.
+  const headLead = $('.gen-head .lead');
+  const facts = _genFactsFor(state.subject);
+  let factIdx = 0;
+  let factTimer = null;
+  if (headLead) {
+    headLead.textContent = facts[0];
+    factTimer = setInterval(() => {
+      factIdx = (factIdx + 1) % facts.length;
+      gsap.fromTo(headLead, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: .35 });
+      headLead.textContent = facts[factIdx];
+    }, 3500);
+  }
 
   if (genTl) genTl.kill();
   genTl = gsap.timeline();
@@ -551,22 +686,612 @@ async function runGeneration() {
     });
   });
 
+  // As soon as the outline arrives, swap in real lesson titles + tags.
+  // This usually beats the animation timeline (timeline ~3.6s, outline ~2-3s).
+  outlinePromise.then(outline => {
+    if (!outline || !outline.lessons) return;
+    state.generatedModule = outline;
+    outline.lessons.forEach((les, i) => {
+      const li = items[i];
+      if (!li) return;
+      const t = li.querySelector('.gen-title');
+      const m = li.querySelector('.gen-meta');
+      const tags = li.querySelector('.gen-tags');
+      if (t) {
+        t.textContent = les.title || `Lecția ${i + 1}`;
+        gsap.fromTo(t, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: .35 });
+      }
+      if (m && les.minutes) m.textContent = `${les.minutes} min`;
+      if (tags && Array.isArray(les.tags) && les.tags.length) {
+        tags.innerHTML = les.tags.slice(0, 4).map(s => `<span>${escapeHtml(String(s))}</span>`).join('');
+      }
+    });
+  });
+
+  // Pass 2 — kick off lesson-1 generation EARLY so by the time the
+  // timeline animation finishes, lesson 1 is ready (or close to it).
+  // Lessons 2..N are prefetched in the background after navigation.
+  const lesson1Promise = outlinePromise.then(outline => {
+    if (!outline || !outline.lessons || !outline.lessons[0]) return null;
+    return api.generateLesson(outline.lessons[0].id).catch(err => {
+      console.warn('lesson 1 generation failed', err);
+      return null;
+    });
+  });
+
   genTl.add(async () => {
     setOrbState('happy');
     streamCtx.stop();
-    const built = await buildPromise;
-    if (built && built.lessons && built.lessons.length) {
-      state.generatedModule = built;
-      state.currentLesson = null;
+    if (factTimer) { clearInterval(factTimer); factTimer = null; }
+
+    // Wait for outline (~5s usually). Don't wait for lesson 1 — we
+    // navigate to the lesson view with a skeleton + apply real content
+    // when lesson 1 promise resolves. Perceived load drops from ~17s
+    // to ~5s.
+    const outline = await outlinePromise;
+    if (outline) {
+      state.generatedModule = outline;
+      // Reset module progress for the fresh course — start at 0%.
+      _setProgress(0);
+      // Reset lesson cache so old courses don't leak into the new one.
+      state.lessonCache = {};
+      // Build a skeleton lesson stub from the outline so the lesson
+      // view shows the lesson title + a "Wispucci scrie..." placeholder
+      // before the body actually arrives.
+      const stub = outline.lessons && outline.lessons[0];
+      if (stub) {
+        state.currentLesson = {
+          id: stub.id,
+          index: stub.index || 1,
+          title: stub.title,
+          body: '',
+          practice: { hook: '', exercises: [], _loading: true },
+        };
+      }
     }
-    // After generation: returning users go straight to lesson;
-    // anonymous users must create an account to save progress.
-    if (Auth.isLoggedIn()) {
-      showView('lesson');
-    } else {
+    // Anonymous users still sign up first.
+    if (!Auth.isLoggedIn()) {
       showView('auth-signup');
+      return;
     }
-  }, '+=0.4');
+    showView('lesson');
+
+    // Now stream the lesson 1 body in once it arrives, then start
+    // prefetching the rest in the background.
+    lesson1Promise.then(lesson1 => {
+      if (lesson1 && state.generatedModule) {
+        state.lessonCache = state.lessonCache || {};
+        state.lessonCache[lesson1.id] = lesson1;
+        // Only swap if the user is still on lesson 1 (race-safe).
+        if (state.currentLesson && state.currentLesson.id === lesson1.id) {
+          state.currentLesson = lesson1;
+          applyLessonToView(lesson1);
+        }
+      }
+      if (state.generatedModule) _prefetchRemainingLessons(state.generatedModule);
+    });
+  }, '+=0.3');
+}
+
+// Sequentially generate lessons 2..N (skip lesson 1 which is already
+// loaded). Sequential — DeepSeek's free tier is rate-limited and
+// bursting causes 429s. By the time the user is on lesson 2, content
+// is ready (no extra wait).
+async function _prefetchRemainingLessons(outline) {
+  if (!outline || !outline.lessons) return;
+  state.lessonCache = state.lessonCache || {};
+  for (let i = 1; i < outline.lessons.length; i++) {
+    const les = outline.lessons[i];
+    if (!les || !les.id) continue;
+    if (state.lessonCache[les.id]) continue;
+    try {
+      const full = await api.generateLesson(les.id);
+      if (full) state.lessonCache[les.id] = full;
+    } catch (err) {
+      console.warn(`prefetch lesson ${i + 1} failed`, err);
+      // Continue with the others — one failure shouldn't kill the chain.
+    }
+  }
+}
+
+// Render a backend lesson object into the lesson view's DOM so the
+// hardcoded demo content gets replaced by AI-generated content. Called
+// whenever state.currentLesson changes.
+function applyLessonToView(lesson) {
+  if (!lesson) return;
+  const card = $('.view-lesson .lesson-card');
+  if (!card) return;
+
+  // Reset to first stage when entering a new lesson. Hide locked tabs
+  // (Exercițiu / Joc) so they reveal one at a time as user clicks Next.
+  // Note tab is always visible (it's a side action, not part of the flow).
+  const stages = _lessonStages(lesson);
+  $$('.lesson-card .tab').forEach(tab => {
+    const t = tab.dataset.tab;
+    if (t === 'theory' || t === 'notes') {
+      tab.removeAttribute('hidden');
+    } else if (stages.includes(t)) {
+      // Will be revealed as user advances.
+      tab.setAttribute('hidden', '');
+    } else {
+      // Stage doesn't apply to this lesson at all.
+      tab.setAttribute('hidden', '');
+    }
+  });
+  state.currentStage = 'theory';
+  $$('.lesson-card .tab').forEach(t => t.classList.toggle('is-active', t.dataset.tab === 'theory'));
+  $$('.lesson-card .tab-pane').forEach(p => p.classList.toggle('is-active', p.dataset.pane === 'theory'));
+
+  const practice = lesson.practice || {};
+  const hook = practice.hook || '';
+  const body = lesson.body || '';
+  const exercises = Array.isArray(practice.exercises) ? practice.exercises : [];
+  const moduleTitle = state.generatedModule?.title || state.topic || '';
+  const lessonIdx = lesson.index || 1;
+
+  // ── ctxbar (Modulul / topic / Lecția N)
+  const ctxL = $('.view-lesson .ctxbar-l');
+  if (ctxL) {
+    ctxL.innerHTML = `
+      <span class="muted">Modulul</span>
+      <span class="dot-sep">·</span>
+      <span>${escapeHtml(moduleTitle)}</span>
+      <span class="dot-sep">·</span>
+      <span>Lecția ${lessonIdx}</span>
+    `;
+  }
+
+  // ── theory pane (title + hook + body paragraphs)
+  const theory = card.querySelector('[data-pane="theory"]');
+  if (theory) {
+    // First word of title gets <em> for the serif italic touch.
+    const title = lesson.title || `Lecția ${lessonIdx}`;
+    const [first, ...rest] = title.split(' ');
+    const titleHtml = rest.length
+      ? `<em>${escapeHtml(first)}</em> ${escapeHtml(rest.join(' '))}`
+      : `<em>${escapeHtml(first)}</em>`;
+
+    const paragraphs = body
+      .split(/\n{2,}/)
+      .map(p => p.trim())
+      .filter(Boolean);
+
+    const parts = [`<h3 class="lesson-title">${titleHtml}</h3>`];
+    if (practice._loading) {
+      // Skeleton while DeepSeek finishes generating the body.
+      parts.push(`
+        <p class="lesson-meta"><em>Wispucci scrie lecția pentru tine…</em></p>
+        <div class="skeleton-line" style="width:96%"></div>
+        <div class="skeleton-line" style="width:88%"></div>
+        <div class="skeleton-line" style="width:74%"></div>
+        <div class="skeleton-line" style="width:90%"></div>
+        <div class="skeleton-line" style="width:62%"></div>
+      `);
+    } else {
+      if (hook) parts.push(`<p class="lesson-meta"><em>${escapeHtml(hook)}</em></p>`);
+      paragraphs.forEach(p => {
+        const codeMatch = p.match(/^```[\w]*\n?([\s\S]*?)\n?```$/);
+        if (codeMatch) {
+          parts.push(`<pre class="code"><code>${escapeHtml(codeMatch[1])}</code></pre>`);
+        } else {
+          // Inline `code` tokens render as monospace chips so prose stays
+          // tied to the syntax it just taught.
+          const safe = escapeHtml(p).replace(
+            /`([^`]+)`/g,
+            (_m, x) => `<code class="inline-code">${x}</code>`
+          );
+          parts.push(`<p class="lesson-body">${safe}</p>`);
+        }
+      });
+    }
+    theory.innerHTML = parts.join('\n');
+  }
+
+  // Update the persistent lesson-nav buttons' disabled state.
+  const prevB = $('#prevStep');
+  const nextB = $('#nextStep');
+  if (prevB) prevB.disabled = !!practice._loading;
+  if (nextB) nextB.disabled = !!practice._loading;
+
+  // ── practice pane (first exercise of type fill/code/choice)
+  const practicePane = card.querySelector('[data-pane="practice"]');
+  if (practicePane) {
+    if (practice._loading) {
+      practicePane.innerHTML = `
+        <h3 class="lesson-title"><em>Exercițiu</em></h3>
+        <p class="lesson-meta"><em>Wispucci pregătește un exercițiu…</em></p>
+        <div class="skeleton-line" style="width:84%"></div>
+        <div class="skeleton-line" style="width:60%"></div>
+      `;
+    } else {
+    const ex = exercises[0];
+    const checkRow = `
+      <div class="lesson-foot">
+        <button class="btn-ghost" id="hintBtn">Indiciu</button>
+        <button class="btn btn-primary" id="checkAnswer">Verifică</button>
+      </div>
+      <p class="practice-feedback" id="practiceFeedback" hidden></p>
+    `;
+    if (!ex) {
+      practicePane.innerHTML = '<p class="muted">Niciun exercițiu pentru lecția asta.</p>';
+    } else if (ex.type === 'fill') {
+      practicePane.innerHTML = `
+        <h3 class="lesson-title"><em>Completează</em></h3>
+        <p class="lesson-body">${escapeHtml(ex.prompt || '')}</p>
+        <p>${(ex.blanks || []).map((_, i) =>
+          `<input class="blank-input" data-blank="${i}" type="text" autocomplete="off" placeholder="___" />`
+        ).join(' ')}</p>
+        ${ex.hint ? `<p class="practice-hint" id="practiceHint" hidden><em>Indiciu:</em> ${escapeHtml(ex.hint)}</p>` : ''}
+        ${checkRow}
+      `;
+    } else if (ex.type === 'code') {
+      practicePane.innerHTML = `
+        <h3 class="lesson-title"><em>Scrie</em> codul</h3>
+        <p class="lesson-body">${escapeHtml(ex.prompt || '')}</p>
+        <pre class="code editable"><code><textarea class="code-area" rows="6" spellcheck="false" autocomplete="off"></textarea></code></pre>
+        ${ex.hint ? `<p class="practice-hint" id="practiceHint" hidden><em>Indiciu:</em> ${escapeHtml(ex.hint)}</p>` : ''}
+        ${checkRow}
+      `;
+    } else if (ex.type === 'choice') {
+      practicePane.innerHTML = `
+        <h3 class="lesson-title"><em>Alege</em> răspunsul</h3>
+        <p class="lesson-body">${escapeHtml(ex.prompt || '')}</p>
+        <div class="choice-grid">${(ex.options || []).map((o, i) =>
+          `<button class="choice-btn" data-i="${i}">${escapeHtml(o)}</button>`
+        ).join('')}</div>
+        <p class="practice-feedback" id="practiceFeedback" hidden></p>
+      `;
+    } else {
+      practicePane.innerHTML = `<p class="muted">Tip exercițiu: ${escapeHtml(ex.type)}</p>`;
+    }
+    _bindPracticeHandlers(ex);
+    } // closes else of practice._loading
+  }
+
+  // Re-bind nextStep / prevStep handlers because we replaced the DOM nodes.
+  _bindLessonStepButtons();
+
+  // Refresh button labels for the current stage (Teorie on entry).
+  _refreshStepButtonLabels();
+
+  // Trigger mini-game lazy-load on next visit to that tab.
+  _miniGameLoaded = false;
+}
+
+// Single source of truth for lesson navigation. Each lesson is one
+// step in the module. Module progress = (current_lesson_index / total) * 100.
+// Removes the older 8%/click logic that lived in initLesson — having two
+// handlers on the same button caused the "Pas următor does nothing" bug.
+function _bindLessonStepButtons() {
+  const nextBtn = $('#nextStep');
+  if (nextBtn) {
+    nextBtn.replaceWith(nextBtn.cloneNode(true));
+    const fresh = $('#nextStep');
+    fresh.addEventListener('click', _onNextStepClick);
+  }
+  const prevBtn = $('#prevStep');
+  if (prevBtn) {
+    prevBtn.replaceWith(prevBtn.cloneNode(true));
+    const fresh = $('#prevStep');
+    fresh.addEventListener('click', _onPrevStepClick);
+  }
+}
+
+// Stage-aware navigation: each lesson goes Teorie → Exercițiu → Joc
+// (skipping stages with no content). Pas următor on the last available
+// stage advances to the next lesson (and bumps module progress 25%).
+// Pasul anterior on the first stage rewinds to the previous lesson's
+// last available stage. Note tab is always reachable, doesn't gate flow.
+function _lessonStages(lesson) {
+  const stages = ['theory'];
+  const hasPractice = lesson && lesson.practice
+    && Array.isArray(lesson.practice.exercises)
+    && lesson.practice.exercises.length > 0;
+  const hasGame = lesson && lesson.practice && lesson.practice.mini_game;
+  if (hasPractice) stages.push('practice');
+  if (hasGame) stages.push('game');
+  return stages;
+}
+
+function _switchToStage(stageName, opts = {}) {
+  const reveal = opts.reveal !== false;
+  state.currentStage = stageName;
+  $$('.lesson-card .tab').forEach(tab => {
+    const isThis = tab.dataset.tab === stageName;
+    tab.classList.toggle('is-active', isThis);
+    // Reveal the tab if we navigated into it (so it's discoverable).
+    if (isThis && reveal && tab.hasAttribute('hidden')) {
+      tab.removeAttribute('hidden');
+      tab.classList.remove('tab-revealed');
+      // Force reflow so the animation re-runs.
+      void tab.offsetWidth;
+      tab.classList.add('tab-revealed');
+    }
+  });
+  $$('.lesson-card .tab-pane').forEach(p => {
+    p.classList.toggle('is-active', p.dataset.pane === stageName);
+  });
+  if (window.gsap) {
+    gsap.from('.tab-pane.is-active', { opacity: 0, y: 6, duration: .3, ease: 'power2.out' });
+  }
+  if (stageName === 'game') ensureMiniGameLoaded();
+  _refreshStepButtonLabels();
+}
+
+// Swap "Pas următor" / "Pasul anterior" labels so the user knows what
+// the next click will do (next stage vs. next lesson vs. finish module).
+function _refreshStepButtonLabels() {
+  const cur = state.currentLesson;
+  const mod = state.generatedModule;
+  if (!cur || !mod || !mod.lessons) return;
+  const stages = _lessonStages(cur);
+  const sIdx = Math.max(0, stages.indexOf(state.currentStage || 'theory'));
+  const lIdx = mod.lessons.findIndex(l => l.id === cur.id);
+  const isLastStage = sIdx >= stages.length - 1;
+  const isLastLesson = lIdx >= mod.lessons.length - 1;
+
+  const next = $('#nextStep');
+  if (next) {
+    if (isLastStage && isLastLesson) {
+      next.textContent = 'Finalizează modulul ✦';
+    } else if (isLastStage) {
+      next.textContent = 'Lecția următoare →';
+    } else if (stages[sIdx + 1] === 'practice') {
+      next.textContent = 'Treci la exercițiu →';
+    } else if (stages[sIdx + 1] === 'game') {
+      next.textContent = 'Treci la joc →';
+    } else {
+      next.textContent = 'Pas următor →';
+    }
+  }
+  const prev = $('#prevStep');
+  if (prev) {
+    const isFirstStage = sIdx === 0;
+    const isFirstLesson = lIdx <= 0;
+    prev.disabled = isFirstStage && isFirstLesson;
+    if (isFirstStage) {
+      prev.textContent = isFirstLesson ? '← Început' : '← Lecția anterioară';
+    } else {
+      prev.textContent = '← Pasul anterior';
+    }
+  }
+}
+
+function _onNextStepClick() {
+  const mod = state.generatedModule;
+  if (!mod || !mod.lessons || !state.currentLesson) return;
+  const cur = state.currentLesson;
+  if ((cur.practice || {})._loading) return; // still streaming, ignore
+
+  const stages = _lessonStages(cur);
+  const stageIdx = Math.max(0, stages.indexOf(state.currentStage || 'theory'));
+  // Are there more stages within this lesson? If so, advance stage only.
+  if (stageIdx < stages.length - 1) {
+    const next = stages[stageIdx + 1];
+    _switchToStage(next);
+    setOrbState('thinking');
+    if (next === 'practice') orbBubble('Acum aplicăm ce am citit.');
+    else if (next === 'game') orbBubble('Hai să facem ceva interactiv.');
+    return;
+  }
+
+  // Otherwise advance to the next lesson.
+  const idx = mod.lessons.findIndex(l => l.id === cur.id);
+  const total = mod.lessons.length;
+  if (idx < 0) return;
+
+  const isLast = idx >= total - 1;
+  if (isLast) {
+    // Last lesson, last stage → mark complete + celebrate. Stays at 100%.
+    _setProgress(100);
+    celebrate();
+    return;
+  }
+
+  const nextStub = mod.lessons[idx + 1];
+  const cached = (state.lessonCache || {})[nextStub.id];
+  if (cached) {
+    state.currentLesson = cached;
+    _setProgress(Math.round(((idx + 1) / total) * 100));
+    applyLessonToView(cached);
+    setOrbState('thinking');
+    orbBubble('Hai să mai vedem un pas.');
+    gsap.fromTo('.lesson-card', { x: 0 }, { x: -8, duration: .15, yoyo: true, repeat: 1, ease: 'power1.inOut' });
+  } else {
+    // Not prefetched yet — show skeleton + fetch foreground.
+    state.currentLesson = {
+      id: nextStub.id,
+      index: nextStub.index || idx + 2,
+      title: nextStub.title,
+      body: '',
+      practice: { hook: '', exercises: [], _loading: true },
+    };
+    _setProgress(Math.round(((idx + 1) / total) * 100));
+    applyLessonToView(state.currentLesson);
+    api.generateLesson(nextStub.id).then(full => {
+      if (full) {
+        state.lessonCache = state.lessonCache || {};
+        state.lessonCache[nextStub.id] = full;
+        // Only swap in if user is still on this lesson.
+        if (state.currentLesson && state.currentLesson.id === full.id) {
+          state.currentLesson = full;
+          applyLessonToView(full);
+        }
+      }
+    }).catch(() => {});
+  }
+}
+
+function _onPrevStepClick() {
+  const mod = state.generatedModule;
+  if (!mod || !mod.lessons || !state.currentLesson) return;
+  const cur = state.currentLesson;
+  const stages = _lessonStages(cur);
+  const stageIdx = Math.max(0, stages.indexOf(state.currentStage || 'theory'));
+  // Within the lesson, rewind stages first.
+  if (stageIdx > 0) {
+    _switchToStage(stages[stageIdx - 1], { reveal: false });
+    orbBubble('Recitim asta.');
+    return;
+  }
+  // First stage → go to previous lesson, jump straight to its LAST stage
+  // (so user lands on the most recent thing they were doing).
+  const idx = mod.lessons.findIndex(l => l.id === cur.id);
+  if (idx <= 0) return; // already at first lesson, first stage
+  const total = mod.lessons.length;
+  const prevStub = mod.lessons[idx - 1];
+  const cached = (state.lessonCache || {})[prevStub.id];
+  if (cached) {
+    state.currentLesson = cached;
+    _setProgress(Math.round((idx - 1) / total * 100));
+    applyLessonToView(cached);
+    // Land on the last stage of the prev lesson.
+    const prevStages = _lessonStages(cached);
+    _switchToStage(prevStages[prevStages.length - 1]);
+    // Reveal all already-walked tabs for the previous lesson so the user
+    // can hop between stages without forcing a re-walk.
+    prevStages.forEach(s => {
+      const t = $(`.lesson-card .tab[data-tab="${s}"]`);
+      if (t) t.removeAttribute('hidden');
+    });
+    orbBubble('Bine. Recitim partea aceea.');
+  } else {
+    api.generateLesson(prevStub.id).then(full => {
+      if (full) {
+        state.lessonCache = state.lessonCache || {};
+        state.lessonCache[prevStub.id] = full;
+        state.currentLesson = full;
+        _setProgress(Math.round((idx - 1) / total * 100));
+        applyLessonToView(full);
+        const prevStages = _lessonStages(full);
+        _switchToStage(prevStages[prevStages.length - 1]);
+        prevStages.forEach(s => {
+          const t = $(`.lesson-card .tab[data-tab="${s}"]`);
+          if (t) t.removeAttribute('hidden');
+        });
+      }
+    });
+  }
+}
+
+function _setProgress(pct) {
+  state.progress = Math.max(0, Math.min(100, pct));
+  Store.get().lessonProgress = state.progress;
+  Store.save();
+  const fill = $('#progressFill');
+  const text = $('#progressPct');
+  if (fill) fill.style.width = state.progress + '%';
+  if (text) text.textContent = state.progress + '%';
+}
+
+// Bind hint + verify handlers for the dynamically rendered exercise.
+// Validation happens client-side against ex.blanks / ex.answer / ex.expected.
+function _bindPracticeHandlers(ex) {
+  if (!ex) return;
+  const card = $('.view-lesson .lesson-card');
+  if (!card) return;
+
+  const hintBtn = card.querySelector('#hintBtn');
+  const hint = card.querySelector('#practiceHint');
+  if (hintBtn && hint) {
+    hintBtn.addEventListener('click', () => {
+      const open = !hint.hasAttribute('hidden');
+      if (open) {
+        hint.setAttribute('hidden', '');
+        hintBtn.textContent = 'Indiciu';
+      } else {
+        hint.removeAttribute('hidden');
+        hintBtn.textContent = 'Ascunde indiciul';
+        if (window.gsap) gsap.from(hint, { opacity: 0, y: 4, duration: .3, ease: 'power2.out' });
+        setOrbState('listening');
+        orbBubble('Indiciu mic, nu răspuns. Tu trebuie să legi punctele.');
+      }
+    });
+  }
+
+  const fb = card.querySelector('#practiceFeedback');
+  const showFb = (ok, msg) => {
+    if (!fb) return;
+    fb.textContent = msg;
+    fb.classList.toggle('is-correct', !!ok);
+    fb.classList.toggle('is-wrong', !ok);
+    fb.removeAttribute('hidden');
+  };
+
+  // Choice exercises validate on click.
+  if (ex.type === 'choice') {
+    const ans = typeof ex.answer === 'number' ? ex.answer : -1;
+    card.querySelectorAll('.choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.dataset.i, 10);
+        card.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('is-correct', 'is-wrong'));
+        if (i === ans) {
+          btn.classList.add('is-correct');
+          showFb(true, ex.feedback_ok || 'Exact. Răspuns corect.');
+          orbBurst();
+          orbBubble('Bine. Mai vine o lecție.');
+          showToast('+12 XP · răspuns corect', '✓');
+        } else {
+          btn.classList.add('is-wrong');
+          showFb(false, ex.feedback_wrong || 'Aproape — încearcă din nou.');
+          setOrbState('confused');
+        }
+      });
+    });
+    return;
+  }
+
+  // Fill / code: validate on Verifică click.
+  const checkBtn = card.querySelector('#checkAnswer');
+  if (!checkBtn) return;
+  checkBtn.addEventListener('click', () => {
+    if (ex.type === 'fill') {
+      const inputs = Array.from(card.querySelectorAll('.blank-input'));
+      const expected = (ex.blanks || []).map(b => norm(b));
+      const got = inputs.map(i => norm(i.value));
+      let allOk = expected.length > 0 && got.length === expected.length;
+      inputs.forEach((inp, i) => {
+        inp.classList.remove('is-correct', 'is-wrong');
+        const ok = expected[i] && got[i] && got[i] === expected[i];
+        inp.classList.add(ok ? 'is-correct' : 'is-wrong');
+        if (!ok) allOk = false;
+      });
+      if (allOk) {
+        showFb(true, ex.feedback_ok || 'Bravo, ai prins ideea.');
+        orbBurst();
+        orbBubble('Exact. Ți-ai prins ideea.');
+        showToast('+12 XP · răspuns corect', '✓');
+      } else {
+        showFb(false, ex.feedback_wrong || 'Mai încearcă — verifică ce-ai scris în fiecare câmp.');
+        setOrbState('confused');
+      }
+    } else if (ex.type === 'code') {
+      const ta = card.querySelector('.code-area');
+      const want = norm(ex.expected || ex.solution || '');
+      const got = norm(ta ? ta.value : '');
+      if (!want) {
+        // No expected provided — just acknowledge effort.
+        showFb(true, 'Codul tău e salvat. Continuă lecția când vrei.');
+        return;
+      }
+      // Forgiving: compare without whitespace differences.
+      const ok = got.replace(/\s+/g, ' ') === want.replace(/\s+/g, ' ');
+      ta.classList.remove('is-correct', 'is-wrong');
+      ta.classList.add(ok ? 'is-correct' : 'is-wrong');
+      if (ok) {
+        showFb(true, ex.feedback_ok || 'Exact. Codul tău e corect.');
+        orbBurst();
+        showToast('+15 XP · cod corect', '✓');
+      } else {
+        showFb(false, ex.feedback_wrong || 'Aproape — verifică sintaxa și încearcă din nou.');
+        setOrbState('confused');
+      }
+    }
+  });
+}
+
+function norm(s) {
+  return String(s || '').trim().toLowerCase();
 }
 
 function startStreamCanvas(canvas) {
@@ -634,104 +1359,20 @@ function initLesson() {
     if (tab.dataset.bound) return;
     tab.dataset.bound = '1';
     tab.addEventListener('click', () => {
-      const t = tab.dataset.tab;
-      $$('.lesson-card .tab').forEach(x => x.classList.toggle('is-active', x === tab));
-      $$('.lesson-card .tab-pane').forEach(p => p.classList.toggle('is-active', p.dataset.pane === t));
-      gsap.from('.tab-pane.is-active', { opacity: 0, y: 6, duration: .35, ease: 'power2.out' });
-      if (t === 'game') ensureMiniGameLoaded();
+      // Don't let users click into hidden/locked tabs.
+      if (tab.hasAttribute('hidden')) return;
+      _switchToStage(tab.dataset.tab, { reveal: false });
     });
   });
 
-  $('#progressFill').style.width = state.progress + '%';
-  $('#progressPct').textContent = state.progress + '%';
-
-  const nextBtn = $('#nextStep');
-  if (nextBtn && !nextBtn.dataset.bound) {
-    nextBtn.dataset.bound = '1';
-    nextBtn.addEventListener('click', () => {
-      state.progress = Math.min(100, state.progress + 8);
-      Store.get().lessonProgress = state.progress;
-      Store.save();
-      $('#progressFill').style.width = state.progress + '%';
-      $('#progressPct').textContent = state.progress + '%';
-      if (state.progress < 100) {
-        setOrbState('thinking');
-        orbBubble('Hai să mai vedem un pas.');
-      }
-      gsap.fromTo('.lesson-card', { x: 0 }, { x: -8, duration: .15, yoyo: true, repeat: 1, ease: 'power1.inOut' });
-      if (state.progress >= 100) {
-        celebrate();
-      }
-    });
-  }
-  const prevBtn = $('#prevStep');
-  if (prevBtn && !prevBtn.dataset.bound) {
-    prevBtn.dataset.bound = '1';
-    prevBtn.addEventListener('click', () => {
-      state.progress = Math.max(0, state.progress - 8);
-      Store.get().lessonProgress = state.progress;
-      Store.save();
-      $('#progressFill').style.width = state.progress + '%';
-      $('#progressPct').textContent = state.progress + '%';
-      orbBubble('Bine. Recitim partea aceea.');
-    });
-  }
-
-  const checkBtn = $('#checkAnswer');
-  if (checkBtn && !checkBtn.dataset.bound) {
-    checkBtn.dataset.bound = '1';
-    checkBtn.addEventListener('click', () => {
-      const a = $('#answerParam');
-      const b = $('#answerVar');
-      if (!a || !b) return;
-      const va = (a.value || '').trim().toLowerCase();
-      const vb = (b.value || '').trim().toLowerCase();
-      const correctParam = ['nume', 'name', 'n'];
-      const okA = correctParam.includes(va) && va.length > 0;
-      const okB = vb === va && vb.length > 0;
-      a.classList.remove('is-correct', 'is-wrong');
-      b.classList.remove('is-correct', 'is-wrong');
-      if (okA && okB) {
-        a.classList.add('is-correct');
-        b.classList.add('is-correct');
-        setOrbState('celebrating');
-        orbBubble('Exact. Ți-ai prins ideea.');
-        showToast('+12 XP · răspuns corect', '✓');
-        setTimeout(() => setOrbState('happy'), 1200);
-      } else if (!va || !vb) {
-        setOrbState('confused');
-        orbBubble('Pune ceva în fiecare câmp — nu e nicio greșeală să ghicim.');
-        if (!va) a.classList.add('is-wrong');
-        if (!vb) b.classList.add('is-wrong');
-      } else {
-        a.classList.add(okA ? 'is-correct' : 'is-wrong');
-        b.classList.add(okB ? 'is-correct' : 'is-wrong');
-        setOrbState('confused');
-        orbBubble(va !== vb
-          ? 'Aproape — verifică că folosești același nume în ambele locuri.'
-          : 'Mai încearcă — gândește-te ce nume scurt are sens pentru o persoană salutată.');
-      }
-    });
-  }
-
-  const hintBtn = $('#hintBtn');
-  const hint = $('#practiceHint');
-  if (hintBtn && hint && !hintBtn.dataset.bound) {
-    hintBtn.dataset.bound = '1';
-    hintBtn.addEventListener('click', () => {
-      const open = !hint.hasAttribute('hidden');
-      if (open) {
-        hint.setAttribute('hidden', '');
-        hintBtn.textContent = 'Indiciu';
-      } else {
-        hint.removeAttribute('hidden');
-        hintBtn.textContent = 'Ascunde indiciul';
-        gsap.from(hint, { opacity: 0, y: 4, duration: .3, ease: 'power2.out' });
-        setOrbState('listening');
-        orbBubble('Indiciu mic, nu răspuns. Tu trebuie să legăm punctele.');
-      }
-    });
-  }
+  // Render the current progress (could be 0 on first visit, or whatever
+  // the user left at). Step buttons are bound by applyLessonToView via
+  // _bindLessonStepButtons — DON'T re-bind them here, that caused the
+  // double-handler bug where Next did nothing.
+  const fill = $('#progressFill');
+  const text = $('#progressPct');
+  if (fill) fill.style.width = state.progress + '%';
+  if (text) text.textContent = state.progress + '%';
 }
 
 function orbBubble(text) {
@@ -827,8 +1468,7 @@ function renderBugHunter(host, game) {
         span.classList.add('is-correct');
         fb.innerHTML = `<b>Da.</b> Linia ${idx + 1} avea bug. Corectă: <code>${escapeHtml(game.fix || '')}</code>`;
         showToast('+15 XP · bug găsit', '✓');
-        setOrbState('celebrating');
-        setTimeout(() => setOrbState('happy'), 1000);
+        orbBurst();
       } else {
         span.classList.add('is-wrong');
         fb.textContent = 'Hmm, asta e ok. Mai uită-te.';
@@ -888,8 +1528,7 @@ function renderCodeAssemble(host, game) {
       fb.textContent = 'Ordine perfectă. Asta-i fluxul.';
       $$('.mg-block', ol).forEach(li => li.classList.add('is-correct'));
       showToast('+18 XP · cod în ordine', '✓');
-      setOrbState('celebrating');
-      setTimeout(() => setOrbState('happy'), 1000);
+      orbBurst();
     } else {
       fb.textContent = 'Aproape — uită-te ce-ar fi rulat primul.';
       setOrbState('confused');
@@ -921,8 +1560,7 @@ function renderOutputPredict(host, game) {
         b.classList.add('is-correct');
         fb.textContent = 'Exact. Bine văzut.';
         showToast('+10 XP · output corect', '✓');
-        setOrbState('celebrating');
-        setTimeout(() => setOrbState('happy'), 1000);
+        orbBurst();
       } else {
         b.classList.add('is-wrong');
         fb.textContent = 'Nu, încearcă altă opțiune.';
@@ -1084,13 +1722,79 @@ $('#saveWord')?.addEventListener('click', () => {
 // =========================================================
 let celebrateFx = null;
 
+function prefersReducedMotion() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+// Quick burst — fired on +XP / correct answer in a mini-game.
+// Squash → elastic scale-up → settle, plus a single plasma shockwave ring.
+function orbBurst() {
+  setOrbState('happy');
+  if (prefersReducedMotion()) {
+    setTimeout(() => setOrbState('idle'), 800);
+    return;
+  }
+  theOrb.classList.remove('is-bursting');
+  void theOrb.offsetWidth;          // force reflow → restart animation
+  theOrb.classList.add('is-bursting');
+  spawnShockwave('plasma', 0);
+  setTimeout(() => theOrb.classList.remove('is-bursting'), 700);
+  setTimeout(() => setOrbState('idle'), 1200);
+}
+
+// Mega-boom — full peak-end dopamine spike at lesson completion.
+// Squash → elastic peak → recoil → second peak, plus 3 staggered
+// shockwave rings + 12 ray bursts.
+function orbBoom() {
+  setOrbState('celebrating');
+  if (prefersReducedMotion()) return;
+  theOrb.classList.remove('is-boom');
+  void theOrb.offsetWidth;
+  theOrb.classList.add('is-boom');
+  spawnShockwave('plasma', 0);
+  spawnShockwave('gold',   140);
+  spawnShockwave('plasma', 280);
+  for (let i = 0; i < 12; i++) {
+    spawnRay(i * 30, i % 2 === 0 ? 'gold' : 'plasma', i * 12);
+  }
+  setTimeout(() => theOrb.classList.remove('is-boom'), 1500);
+}
+
+function spawnShockwave(kind = 'plasma', delay = 0) {
+  setTimeout(() => {
+    const ring = document.createElement('div');
+    ring.className = 'orb-shockwave-ring' + (kind === 'gold' ? ' gold' : '');
+    theOrb.appendChild(ring);
+    setTimeout(() => ring.remove(), 1000);
+  }, delay);
+}
+
+function spawnRay(angleDeg, kind = 'gold', delay = 0) {
+  setTimeout(() => {
+    const ray = document.createElement('div');
+    ray.className = 'orb-ray-burst' + (kind === 'plasma' ? ' plasma' : '');
+    ray.style.setProperty('--ray-angle', angleDeg + 'deg');
+    theOrb.appendChild(ray);
+    setTimeout(() => ray.remove(), 800);
+  }, delay);
+}
+
+let _orbBoomTimer = null;
+
 function celebrate() {
   const overlay = $('#celebrate');
   overlay.classList.add('is-on');
   gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: .25 });
   gsap.fromTo('.celebrate-card', { scale: .92, y: 12, opacity: 0 }, { scale: 1, y: 0, opacity: 1, duration: .6, ease: 'back.out(1.6)' });
   moveOrbToHost('celebrate', { duration: .6 });
-  setOrbState('celebrating');
+  // Trigger the dopamine bang once the orb finishes flying to the
+  // celebrate host (otherwise the burst transform + FLIP transform
+  // fight each other and the orb visibly stutters). Save the timer
+  // ID so closeCelebrate can cancel it if the user dismisses the
+  // overlay before the boom fires (otherwise the orb would get stuck
+  // in the celebrating state on the lesson view).
+  if (_orbBoomTimer) clearTimeout(_orbBoomTimer);
+  _orbBoomTimer = setTimeout(() => { _orbBoomTimer = null; orbBoom(); }, 620);
   if (celebrateFx) celebrateFx.stop();
   celebrateFx = startCelebrateFx($('#celebrateFx'));
 }
@@ -1100,11 +1804,17 @@ $('#celebrateNext')?.addEventListener('click',  closeCelebrate);
 
 function closeCelebrate() {
   const overlay = $('#celebrate');
+  if (_orbBoomTimer) { clearTimeout(_orbBoomTimer); _orbBoomTimer = null; }
   if (celebrateFx) { celebrateFx.stop(); celebrateFx = null; }
+  // After celebrating module completion, the user shouldn't land back
+  // inside a 100%-completed lesson (clicking Next there does nothing).
+  // Reset progress + return to home so they can start a new course or
+  // pick up another module.
+  _setProgress(0);
   gsap.to(overlay, { opacity: 0, duration: .25, onComplete: () => {
     overlay.classList.remove('is-on');
-    moveOrbToHost('lesson');
     setOrbState('idle');
+    showView('home');
   }});
 }
 
@@ -1324,20 +2034,127 @@ $('#masteredSearch')?.addEventListener('input', (e) => {
 });
 
 // =========================================================
-// HOME — refresh dynamic content from latest stats
+// HOME — refresh dynamic content from latest stats + module
 // =========================================================
 async function refreshHome() {
   if (!Auth.isLoggedIn()) return;
+
+  // Avatar + greeting (uses Auth.user — instant, doesn't wait on API).
+  const u = Auth.user;
+  const name = (u && u.name) ? u.name.split(' ')[0] : '';
+  const initial = (u && u.name && u.name[0]) ? u.name[0].toUpperCase() : '?';
+  $$('[data-avatar]').forEach(el => el.textContent = initial);
+
+  const greeting = $('[data-home-greeting]');
+  if (greeting) {
+    greeting.innerHTML = name
+      ? `<em>Bună,</em> ${escapeHtml(name)}.<br/><span class="muted-soft"><em>Hai</em> să continuăm.</span>`
+      : `<em>Bună.</em><br/><span class="muted-soft"><em>Hai</em> să începem.</span>`;
+  }
+
+  const eyebrow = $('[data-home-eyebrow]');
+  if (eyebrow) eyebrow.textContent = _humanGreetingTime();
+
+  // Continue card — only show if there's a generated module in progress.
+  const cont = $('[data-home-continue]');
+  const empty = $('[data-home-continue-empty]');
+  const lead = $('[data-home-lead]');
+  const recentSection = $('[data-home-recent-section]');
+  const recentList = $('[data-home-recent-list]');
+
+  const mod = state.generatedModule;
+  if (mod && mod.lessons && mod.lessons.length && state.currentLesson) {
+    const idx = mod.lessons.findIndex(l => l.id === state.currentLesson.id);
+    const total = mod.lessons.length;
+    const pct = state.progress || 0;
+    if (cont) cont.removeAttribute('hidden');
+    if (empty) empty.setAttribute('hidden', '');
+    if (lead) {
+      lead.innerHTML = `Ai rămas la <em>${escapeHtml(state.currentLesson.title || 'lecția curentă')}</em>. Mai ai <b>${Math.max(0, total - idx - 1)}</b> ${total - idx - 1 === 1 ? 'lecție' : 'lecții'} până la finalul modulului.`;
+    }
+    const meta = $('[data-home-continue-meta]');
+    const title = $('[data-home-continue-title]');
+    const fill = $('[data-home-continue-fill]');
+    const pctLabel = $('[data-home-continue-pct]');
+    if (meta) meta.textContent = `MODULUL ${escapeHtml(mod.title || '')} · LECȚIA ${idx >= 0 ? idx + 1 : 1}`;
+    if (title) title.innerHTML = `<em>${escapeHtml((state.currentLesson.title || '').split(' ')[0] || 'Continuă')}</em> ${escapeHtml((state.currentLesson.title || '').split(' ').slice(1).join(' '))}`;
+    if (fill) fill.style.width = pct + '%';
+    if (pctLabel) pctLabel.textContent = `${pct}% din modul`;
+
+    // Recent list shows all lessons with status (current / done / pending).
+    if (recentSection) recentSection.removeAttribute('hidden');
+    if (recentList) {
+      recentList.innerHTML = mod.lessons.map((l, i) => {
+        const isCurrent = i === idx;
+        const isDone = i < idx;
+        const status = isCurrent ? 'status-active' : (isDone ? 'status-done' : '');
+        const symbol = isCurrent ? '●' : (isDone ? '✓' : '·');
+        const meta = isCurrent ? `${pct}% terminat` : (isDone ? '✓ gata' : '~5 min · în așteptare');
+        return `
+          <button class="recent-item" data-recent-idx="${i}">
+            <span class="recent-num">L${i + 1}</span>
+            <span class="recent-title">${escapeHtml(l.title || `Lecția ${i + 1}`)}</span>
+            <span class="recent-meta">${meta}</span>
+            <span class="recent-status ${status}">${symbol}</span>
+          </button>
+        `;
+      }).join('');
+      recentList.querySelectorAll('[data-recent-idx]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const i = parseInt(btn.dataset.recentIdx, 10);
+          const stub = mod.lessons[i];
+          if (!stub) return;
+          let lesson = (state.lessonCache || {})[stub.id];
+          if (!lesson) {
+            lesson = await api.generateLesson(stub.id).catch(() => null);
+            if (lesson) {
+              state.lessonCache = state.lessonCache || {};
+              state.lessonCache[stub.id] = lesson;
+            }
+          }
+          if (lesson) {
+            state.currentLesson = lesson;
+            _setProgress(Math.round((i / mod.lessons.length) * 100));
+            showView('lesson');
+          }
+        });
+      });
+    }
+  } else {
+    if (cont) cont.setAttribute('hidden', '');
+    if (empty) empty.removeAttribute('hidden');
+    if (lead) lead.innerHTML = 'Generează primul tău curs ca să începem. Wispucci scrie totul pe loc, în câteva secunde.';
+    if (recentSection) recentSection.setAttribute('hidden', '');
+    if (recentList) recentList.innerHTML = '';
+  }
+
+  // Stats from API.
   let stats;
   try { stats = await api.stats(); state.statsCache = stats; }
   catch (_) { return; }
+  // Aggregate lesson counts from by_subject
+  const subjects = (stats.lessons && stats.lessons.by_subject) || [];
+  const lessonsDone = subjects.reduce((s, x) => s + (x.completed || 0), 0);
+  const lessonsStarted = subjects.reduce((s, x) => s + (x.started || 0), 0);
   $$('[data-streak]').forEach(el => el.textContent = stats.streak.current);
+  $$('[data-stat-streak-num]').forEach(el => el.textContent = stats.streak.current);
+  $$('[data-stat-streak-longest]').forEach(el => el.textContent = stats.streak.longest);
+  $$('[data-stat-week-xp]').forEach(el => el.textContent = stats.xp.week);
+  $$('[data-stat-today-xp]').forEach(el => el.textContent = stats.xp.today);
+  $$('[data-stat-lessons-done]').forEach(el => el.textContent = lessonsDone);
+  $$('[data-stat-lessons-total]').forEach(el => el.textContent = lessonsStarted);
+  $$('[data-stat-modules]').forEach(el => el.textContent = subjects.length);
   $$('[data-mastered-total]').forEach(el => el.textContent = stats.mastered.total);
   $$('[data-mastered-new]').forEach(el => el.textContent = stats.mastered.new_today);
-  // Avatar initial
-  const u = Auth.user;
-  const initial = (u && u.name && u.name[0]) ? u.name[0].toUpperCase() : '?';
-  $$('[data-avatar]').forEach(el => el.textContent = initial);
+  $$('[data-celebrate-xp]').forEach(el => el.innerHTML = `+${stats.xp.today || 0} XP <span class="muted">· streak <span data-celebrate-streak>${stats.streak.current}</span> zile</span>`);
+}
+
+function _humanGreetingTime() {
+  const d = new Date();
+  const days = ['duminică', 'luni', 'marți', 'miercuri', 'joi', 'vineri', 'sâmbătă'];
+  const h = d.getHours();
+  const part = h < 5 ? 'noapte' : (h < 12 ? 'dimineața' : (h < 18 ? 'după-amiaza' : 'seara'));
+  return `${days[d.getDay()]} · ${h}:${String(d.getMinutes()).padStart(2, '0')} ${part}`;
 }
 
 // =========================================================
@@ -1491,7 +2308,7 @@ window.addEventListener('load', () => {
   // Place orb at the active view's host (welcome by default).
   placeOrbInstantlyAt('welcome');
   setOrbState('idle');
-  window.addEventListener('resize', () => placeOrbInstantlyAt(state.view));
+  // (resize listener is registered globally above via scheduleOrbReAnchor)
 
   gsap.from('.welcome-wrap .display',  { y: 24, opacity: 0, duration: .9, delay: .3, ease: 'power3.out' });
   gsap.from('.welcome-wrap .lead',     { y: 14, opacity: 0, duration: .8, delay: .55, ease: 'power3.out' });

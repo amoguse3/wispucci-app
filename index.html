@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./style.css?v=9" />
+<link rel="stylesheet" href="./style.css?v=27" />
 </head>
 <body>
 
@@ -88,10 +88,8 @@
       <div class="orb-core">
         <div class="orb-shine"></div>
         <svg class="orb-face" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-          <g class="face-brows">
-            <path class="brow brow-l" d="M 30 38 Q 38 35 46 38" fill="none" stroke-linecap="round"/>
-            <path class="brow brow-r" d="M 54 38 Q 62 35 70 38" fill="none" stroke-linecap="round"/>
-          </g>
+          <!-- Eyebrows removed at user's request — keeps the orb face minimal. -->
+          <g class="face-brows" hidden></g>
           <g class="face-eyes">
             <ellipse class="eye eye-l" cx="38" cy="50" rx="3.6" ry="5.4"/>
             <ellipse class="eye eye-r" cx="62" cy="50" rx="3.6" ry="5.4"/>
@@ -124,33 +122,42 @@
         <li><a href="#" data-go="settings">Settings</a></li>
       </ul>
       <div class="topnav-right">
-        <span class="streak">🔥 <span data-streak>3</span></span>
-        <div class="avatar">M</div>
+        <span class="streak">🔥 <span data-streak>0</span></span>
+        <div class="avatar" data-avatar>?</div>
       </div>
     </nav>
 
     <div class="home-body">
       <section class="home-hero">
         <div class="home-hero-text">
-          <p class="home-eyebrow">marți · 8:24 dimineața</p>
-          <h1 class="display home-greeting">
-            <em>Bună,</em> Maxim.<br/>
-            <span class="muted-soft"><em>Hai</em> să continuăm.</span>
+          <p class="home-eyebrow" data-home-eyebrow></p>
+          <h1 class="display home-greeting" data-home-greeting>
+            <em>Bun</em> venit.
           </h1>
-          <p class="lead home-lead">Ai rămas la <em>Funcții cu parametri</em>. Îți mai trebuie <b>~3 minute</b> ca să închei modulul 2.</p>
+          <p class="lead home-lead" data-home-lead>Alege un subiect și pornim împreună.</p>
 
-          <div class="home-continue">
-            <button class="btn btn-primary btn-large" data-go="lesson">
+          <div class="home-continue" data-home-continue hidden>
+            <button class="btn btn-primary btn-large" data-go="lesson" data-home-continue-btn>
               <span class="continue-label">
-                <span class="continue-meta">MODULUL 2 · LECȚIA 4</span>
-                <span class="continue-title"><em>Funcții</em> cu parametri</span>
+                <span class="continue-meta" data-home-continue-meta>MODUL · LECȚIE</span>
+                <span class="continue-title" data-home-continue-title><em>Continuă</em> lecția</span>
               </span>
               <span class="continue-arrow">→</span>
             </button>
             <div class="continue-bar">
-              <div class="continue-bar-track"><div class="continue-bar-fill" style="width: 47%"></div></div>
-              <span class="continue-bar-meta">47% · ~3 min rămase</span>
+              <div class="continue-bar-track"><div class="continue-bar-fill" data-home-continue-fill style="width: 0%"></div></div>
+              <span class="continue-bar-meta" data-home-continue-pct>0%</span>
             </div>
+          </div>
+          <div class="home-continue-empty" data-home-continue-empty>
+            <button class="btn btn-primary btn-large" data-go="onboarding-1">
+              <span class="continue-label">
+                <span class="continue-meta">PORNEȘTE</span>
+                <span class="continue-title"><em>Generează</em> un curs nou</span>
+              </span>
+              <span class="continue-arrow">→</span>
+            </button>
+            <p class="continue-bar-meta">Alege un subiect, Wispucci scrie lecțiile pe loc.</p>
           </div>
         </div>
         <div class="home-hero-orb">
@@ -161,21 +168,21 @@
       <section class="home-stats">
         <div class="stat-card">
           <span class="stat-icon">🔥</span>
-          <span class="stat-num">3</span>
+          <span class="stat-num" data-stat-streak-num>0</span>
           <span class="stat-label">zile streak</span>
-          <span class="stat-sub">cea mai lungă · 12</span>
+          <span class="stat-sub">cea mai lungă · <span data-stat-streak-longest>0</span></span>
         </div>
         <div class="stat-card">
           <span class="stat-icon">★</span>
-          <span class="stat-num">142</span>
+          <span class="stat-num" data-stat-week-xp>0</span>
           <span class="stat-label">XP săptămâna asta</span>
-          <span class="stat-sub">+47 azi</span>
+          <span class="stat-sub">+<span data-stat-today-xp>0</span> azi</span>
         </div>
         <div class="stat-card">
           <span class="stat-icon">▦</span>
-          <span class="stat-num">8<span class="stat-num-sub">/24</span></span>
+          <span class="stat-num"><span data-stat-lessons-done>0</span><span class="stat-num-sub">/<span data-stat-lessons-total>0</span></span></span>
           <span class="stat-label">lecții terminate</span>
-          <span class="stat-sub">3 module · 1 deschis</span>
+          <span class="stat-sub"><span data-stat-modules>0</span> module</span>
         </div>
         <div class="stat-card">
           <span class="stat-icon">A</span>
@@ -218,37 +225,12 @@
         </div>
       </section>
 
-      <section class="home-section">
+      <section class="home-section" data-home-recent-section hidden>
         <header class="home-section-head">
           <h2 class="h2"><em>Ultimele</em> lecții</h2>
           <button class="btn-link" data-go="lesson" data-go-list>vezi toate →</button>
         </header>
-        <div class="recent-list">
-          <button class="recent-item" data-go="lesson">
-            <span class="recent-num">M2 · L4</span>
-            <span class="recent-title"><em>Funcții</em> cu parametri</span>
-            <span class="recent-meta">3 min · 47% terminat</span>
-            <span class="recent-status status-active">●</span>
-          </button>
-          <button class="recent-item">
-            <span class="recent-num">M2 · L3</span>
-            <span class="recent-title"><em>Funcții</em> fără parametri</span>
-            <span class="recent-meta">4 min · ✓ gata</span>
-            <span class="recent-status status-done">✓</span>
-          </button>
-          <button class="recent-item">
-            <span class="recent-num">M2 · L2</span>
-            <span class="recent-title"><em>Apel</em> și return</span>
-            <span class="recent-meta">5 min · ✓ gata</span>
-            <span class="recent-status status-done">✓</span>
-          </button>
-          <button class="recent-item">
-            <span class="recent-num">M2 · L1</span>
-            <span class="recent-title"><em>Ce e</em> o funcție?</span>
-            <span class="recent-meta">3 min · ✓ gata</span>
-            <span class="recent-status status-done">✓</span>
-          </button>
-        </div>
+        <div class="recent-list" data-home-recent-list></div>
       </section>
     </div>
   </section>
@@ -455,18 +437,14 @@
         <li><a href="#" data-go="settings">Settings</a></li>
       </ul>
       <div class="topnav-right">
-        <span class="streak">🔥 <span data-streak>3</span></span>
-        <div class="avatar">M</div>
+        <span class="streak">🔥 <span data-streak>0</span></span>
+        <div class="avatar" data-avatar>?</div>
       </div>
     </nav>
 
     <div class="ctxbar">
-      <div class="ctxbar-l">
-        <span class="muted">Modulul 2</span>
-        <span class="dot-sep">·</span>
-        <span>Funcții</span>
-        <span class="dot-sep">·</span>
-        <span>Lecția 4</span>
+      <div class="ctxbar-l" data-lesson-ctxbar>
+        <span class="muted">Curs</span>
       </div>
       <div class="ctxbar-r">
         <button class="btn-ghost" id="focusModeBtn">Mod focus</button>
@@ -488,40 +466,18 @@
       <article class="lesson-card">
         <div class="tabs">
           <button class="tab is-active" data-tab="theory">Teorie</button>
-          <button class="tab" data-tab="game">Joc</button>
-          <button class="tab" data-tab="practice">Exercițiu</button>
-          <button class="tab" data-tab="notes">Note</button>
+          <button class="tab" data-tab="practice" hidden>Exercițiu</button>
+          <button class="tab" data-tab="game" hidden>Joc</button>
+          <button class="tab tab-side" data-tab="notes" title="Notele tale">Note</button>
         </div>
 
         <div class="tab-pane is-active" data-pane="theory">
-          <h3 class="lesson-title"><em>Funcții</em> cu parametri</h3>
-          <p class="lesson-meta">Modulul 2 · 3 min citire</p>
-
-          <p class="lesson-body">
-            O <b>funcție</b> poate primi date pentru a le procesa. Acestea se numesc <b>parametri</b>.
-            Selectează orice cuvânt sau propoziție pe care nu o înțelegi — apare un buton <i>„Explică-mi"</i>.
-          </p>
-
-          <pre class="code"><code>def saluta(nume):
-    print(f"Salut, {nume}!")
-
-saluta("Maria")   # Salut, Maria!
-saluta("Andrei")  # Salut, Andrei!</code></pre>
-
-          <p class="lesson-body">
-            Parametrul <code>nume</code> e ca o cutie pe care o umpli când chemi funcția.
-            La fiecare apel, cutia primește o valoare diferită.
-          </p>
-
-          <p class="lesson-body lesson-note">
-            <span class="note-tag">Notă</span>
-            Parametrul e local funcției. Nu există în afara ei. Asta e <i>scope</i> și ajungem la el în lecția 6.
-          </p>
-
-          <div class="lesson-foot">
-            <button class="btn-ghost" id="prevStep">← Pasul anterior</button>
-            <button class="btn btn-primary" id="nextStep">Pas următor →</button>
-          </div>
+          <!-- Populated by applyLessonToView() with the generated lesson body. -->
+          <h3 class="lesson-title">Lecția se pregătește…</h3>
+          <p class="lesson-meta"><em>Wispucci scrie pentru tine</em></p>
+          <div class="skeleton-line" style="width:90%"></div>
+          <div class="skeleton-line" style="width:80%"></div>
+          <div class="skeleton-line" style="width:70%"></div>
         </div>
 
         <div class="tab-pane" data-pane="game">
@@ -533,21 +489,20 @@ saluta("Andrei")  # Salut, Andrei!</code></pre>
         </div>
 
         <div class="tab-pane" data-pane="practice">
-          <h3 class="lesson-title"><em>Scrie</em> o funcție care salută</h3>
-          <p class="lesson-body">Completează codul ca <code>saluta("Ana")</code> să afișeze <code>Salut, Ana!</code>.</p>
-          <pre class="code editable"><code>def saluta(<input class="blank-input" id="answerParam" type="text" autocomplete="off" spellcheck="false" placeholder="___" />):
-    print(f"Salut, {<input class="blank-input" id="answerVar" type="text" autocomplete="off" spellcheck="false" placeholder="___" />}!")</code></pre>
-          <p class="practice-hint" id="practiceHint" hidden><em>Indiciu:</em> parametrul are de obicei un nume scurt care descrie ce primește. Pentru un salut, o variabilă bună s-ar numi <code>nume</code>.</p>
-          <div class="lesson-foot">
-            <button class="btn-ghost" id="hintBtn">Indiciu</button>
-            <button class="btn btn-primary" id="checkAnswer">Verifică</button>
-          </div>
+          <!-- Populated by applyLessonToView() with the generated exercise. -->
+          <p class="muted">Exercițiul apare după ce lecția e gata.</p>
         </div>
 
         <div class="tab-pane" data-pane="notes">
           <h3 class="lesson-title"><em>Notele</em> tale</h3>
           <p class="lesson-body muted">Scrie cu mâna ta ce ai înțeles. Aceste note rămân ale tale.</p>
           <textarea class="notes-area" placeholder="Funcția primește o valoare prin paranteze. Numele din paranteze e parametrul, valoarea efectivă e argumentul…"></textarea>
+        </div>
+
+        <!-- Persistent card-level nav (always visible across stages) -->
+        <div class="lesson-nav">
+          <button class="btn-ghost" id="prevStep" disabled>← Pasul anterior</button>
+          <button class="btn btn-primary" id="nextStep" disabled>Pas următor →</button>
         </div>
       </article>
     </main>
@@ -556,8 +511,8 @@ saluta("Andrei")  # Salut, Andrei!</code></pre>
     <footer class="lesson-progress">
       <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
       <div class="progress-meta">
-        <span id="progressPct">47%</span>
-        <span class="muted">din lecție</span>
+        <span id="progressPct">0%</span>
+        <span class="muted">din modul</span>
       </div>
     </footer>
 
@@ -592,12 +547,12 @@ saluta("Andrei")  # Salut, Andrei!</code></pre>
       <canvas class="celebrate-fx" id="celebrateFx"></canvas>
       <div class="celebrate-card">
         <div class="celebrate-orb-host" data-orb-host="celebrate"></div>
-        <h3><em>Lecția</em> gata.</h3>
-        <p class="lead">+47 XP <span class="muted">· streak 4 zile</span></p>
-        <p class="muted small">Mâine continuăm cu listele.</p>
+        <h3><em>Modul</em> terminat.</h3>
+        <p class="lead" data-celebrate-xp>+0 XP <span class="muted">· streak <span data-celebrate-streak>0</span> zile</span></p>
+        <p class="muted small" data-celebrate-next>Vino mâine pentru un modul nou.</p>
         <div class="cta-row">
           <button class="btn-ghost" id="celebrateClose">Închide</button>
-          <button class="btn btn-primary" id="celebrateNext">Vezi rezumatul</button>
+          <button class="btn btn-primary" id="celebrateNext">Înapoi la home</button>
         </div>
       </div>
     </div>
@@ -721,8 +676,8 @@ saluta("Andrei")  # Salut, Andrei!</code></pre>
         <li class="is-active"><a href="#" data-go="settings">Settings</a></li>
       </ul>
       <div class="topnav-right">
-        <span class="streak">🔥 <span data-streak>3</span></span>
-        <div class="avatar">M</div>
+        <span class="streak">🔥 <span data-streak>0</span></span>
+        <div class="avatar" data-avatar>?</div>
       </div>
     </nav>
 
@@ -823,6 +778,6 @@ saluta("Andrei")  # Salut, Andrei!</code></pre>
 
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/Flip.min.js"></script>
-<script src="./app.js?v=9"></script>
+<script src="./app.js?v=27"></script>
 </body>
 </html>

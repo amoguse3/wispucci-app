@@ -7,6 +7,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+# Load .env from project root if present. python-dotenv is already a
+# direct dependency. We do this BEFORE the dataclass is defined so the
+# os.getenv defaults pick up file-based values.
+try:
+    from dotenv import load_dotenv
+    _root = Path(__file__).resolve().parent.parent
+    for _candidate in ("backend/.env", ".env", "backend/.env.local", ".env.local"):
+        _p = _root / _candidate
+        if _p.exists():
+            load_dotenv(_p, override=False)
+except Exception:
+    pass
+
 
 @dataclass
 class Settings:
@@ -24,10 +37,14 @@ class Settings:
     )
     DB_ECHO: bool = DEBUG
 
-    # AI Tutor (OpenAI-compatible API)
+    # AI Tutor (OpenAI-compatible API). Defaults target DeepSeek's
+    # `deepseek-chat` (V3.x) — fastest and cheapest model with reliable
+    # JSON-mode + streaming + Romanian fluency. Override via env vars to
+    # point at any other OpenAI-compatible endpoint (OpenAI, Anthropic
+    # via proxy, Together, Groq, etc.).
     AI_API_KEY: Optional[str] = os.getenv("AI_API_KEY", None)
-    AI_BASE_URL: str = os.getenv("AI_BASE_URL", "https://api.openai.com/v1")
-    AI_MODEL: str = os.getenv("AI_MODEL", "gpt-4o-mini")
+    AI_BASE_URL: str = os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1")
+    AI_MODEL: str = os.getenv("AI_MODEL", "deepseek-chat")
     AI_TUTOR_TEMPERATURE: float = 0.7
     AI_TUTOR_MAX_TOKENS: int = 512
 
