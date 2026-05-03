@@ -1397,6 +1397,16 @@ textarea.code-area {
   caret-color: var(--accent);
 }
 textarea.code-area::placeholder { color: var(--text-3); }
+/* Inline code chips inside lesson body — keeps prose tied to syntax. */
+.inline-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .92em;
+  background: rgba(239,221,141,.08);
+  border: 1px solid rgba(239,221,141,.15);
+  color: var(--accent-soft);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
 .code .blank {
   display: inline-block;
   min-width: 64px;

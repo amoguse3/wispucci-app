@@ -874,7 +874,13 @@ function applyLessonToView(lesson) {
         if (codeMatch) {
           parts.push(`<pre class="code"><code>${escapeHtml(codeMatch[1])}</code></pre>`);
         } else {
-          parts.push(`<p class="lesson-body">${escapeHtml(p)}</p>`);
+          // Inline `code` tokens render as monospace chips so prose stays
+          // tied to the syntax it just taught.
+          const safe = escapeHtml(p).replace(
+            /`([^`]+)`/g,
+            (_m, x) => `<code class="inline-code">${x}</code>`
+          );
+          parts.push(`<p class="lesson-body">${safe}</p>`);
         }
       });
     }
