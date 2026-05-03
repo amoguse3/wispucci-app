@@ -731,6 +731,10 @@ async function runGeneration() {
     const outline = await outlinePromise;
     if (outline) {
       state.generatedModule = outline;
+      // Reset module progress for the fresh course — start at 0%.
+      _setProgress(0);
+      // Reset lesson cache so old courses don't leak into the new one.
+      state.lessonCache = {};
       // Build a skeleton lesson stub from the outline so the lesson
       // view shows the lesson title + a "Wispucci scrie..." placeholder
       // before the body actually arrives.
@@ -756,8 +760,13 @@ async function runGeneration() {
     // prefetching the rest in the background.
     lesson1Promise.then(lesson1 => {
       if (lesson1 && state.generatedModule) {
-        state.currentLesson = lesson1;
-        applyLessonToView(lesson1);
+        state.lessonCache = state.lessonCache || {};
+        state.lessonCache[lesson1.id] = lesson1;
+        // Only swap if the user is still on lesson 1 (race-safe).
+        if (state.currentLesson && state.currentLesson.id === lesson1.id) {
+          state.currentLesson = lesson1;
+          applyLessonToView(lesson1);
+        }
       }
       if (state.generatedModule) _prefetchRemainingLessons(state.generatedModule);
     });
@@ -870,6 +879,13 @@ function applyLessonToView(lesson) {
       `;
     } else {
     const ex = exercises[0];
+    const checkRow = `
+      <div class="lesson-foot">
+        <button class="btn-ghost" id="hintBtn">Indiciu</button>
+        <button class="btn btn-primary" id="checkAnswer">Verifică</button>
+      </div>
+      <p class="practice-feedback" id="practiceFeedback" hidden></p>
+    `;
     if (!ex) {
       practicePane.innerHTML = '<p class="muted">Niciun exercițiu pentru lecția asta.</p>';
     } else if (ex.type === 'fill') {
@@ -879,14 +895,16 @@ function applyLessonToView(lesson) {
         <p>${(ex.blanks || []).map((_, i) =>
           `<input class="blank-input" data-blank="${i}" type="text" autocomplete="off" placeholder="___" />`
         ).join(' ')}</p>
-        ${ex.hint ? `<p class="practice-hint"><em>Indiciu:</em> ${escapeHtml(ex.hint)}</p>` : ''}
+        ${ex.hint ? `<p class="practice-hint" id="practiceHint" hidden><em>Indiciu:</em> ${escapeHtml(ex.hint)}</p>` : ''}
+        ${checkRow}
       `;
     } else if (ex.type === 'code') {
       practicePane.innerHTML = `
         <h3 class="lesson-title"><em>Scrie</em> codul</h3>
         <p class="lesson-body">${escapeHtml(ex.prompt || '')}</p>
-        <pre class="code editable"><code><textarea class="code-area" rows="6" spellcheck="false"></textarea></code></pre>
-        ${ex.hint ? `<p class="practice-hint"><em>Indiciu:</em> ${escapeHtml(ex.hint)}</p>` : ''}
+        <pre class="code editable"><code><textarea class="code-area" rows="6" spellcheck="false" autocomplete="off"></textarea></code></pre>
+        ${ex.hint ? `<p class="practice-hint" id="practiceHint" hidden><em>Indiciu:</em> ${escapeHtml(ex.hint)}</p>` : ''}
+        ${checkRow}
       `;
     } else if (ex.type === 'choice') {
       practicePane.innerHTML = `
@@ -895,10 +913,12 @@ function applyLessonToView(lesson) {
         <div class="choice-grid">${(ex.options || []).map((o, i) =>
           `<button class="choice-btn" data-i="${i}">${escapeHtml(o)}</button>`
         ).join('')}</div>
+        <p class="practice-feedback" id="practiceFeedback" hidden></p>
       `;
     } else {
       practicePane.innerHTML = `<p class="muted">Tip exercițiu: ${escapeHtml(ex.type)}</p>`;
     }
+    _bindPracticeHandlers(ex);
     } // closes else of practice._loading
   }
 
@@ -909,63 +929,223 @@ function applyLessonToView(lesson) {
   _miniGameLoaded = false;
 }
 
+// Single source of truth for lesson navigation. Each lesson is one
+// step in the module. Module progress = (current_lesson_index / total) * 100.
+// Removes the older 8%/click logic that lived in initLesson — having two
+// handlers on the same button caused the "Pas următor does nothing" bug.
 function _bindLessonStepButtons() {
   const nextBtn = $('#nextStep');
   if (nextBtn) {
     nextBtn.replaceWith(nextBtn.cloneNode(true));
     const fresh = $('#nextStep');
-    fresh.addEventListener('click', () => {
-      state.progress = Math.min(100, state.progress + 25);
-      Store.get().lessonProgress = state.progress;
-      Store.save();
-      $('#progressFill').style.width = state.progress + '%';
-      $('#progressPct').textContent = state.progress + '%';
-      gsap.fromTo('.lesson-card', { x: 0 }, { x: -8, duration: .15, yoyo: true, repeat: 1, ease: 'power1.inOut' });
-      if (state.progress >= 100) {
-        celebrate();
-      } else {
-        // Advance to next lesson if available (cached, instant).
-        _advanceToNextLesson();
-        setOrbState('thinking');
-        orbBubble('Hai să mai vedem un pas.');
-      }
-    });
+    fresh.addEventListener('click', _onNextStepClick);
   }
   const prevBtn = $('#prevStep');
   if (prevBtn) {
     prevBtn.replaceWith(prevBtn.cloneNode(true));
     const fresh = $('#prevStep');
-    fresh.addEventListener('click', () => {
-      state.progress = Math.max(0, state.progress - 25);
-      Store.get().lessonProgress = state.progress;
-      Store.save();
-      $('#progressFill').style.width = state.progress + '%';
-      $('#progressPct').textContent = state.progress + '%';
-      orbBubble('Bine. Recitim partea aceea.');
-    });
+    fresh.addEventListener('click', _onPrevStepClick);
   }
 }
 
-function _advanceToNextLesson() {
+function _onNextStepClick() {
   const mod = state.generatedModule;
   if (!mod || !mod.lessons || !state.currentLesson) return;
-  const idx = mod.lessons.findIndex(l => l.id === state.currentLesson.id);
-  if (idx < 0 || idx >= mod.lessons.length - 1) return;
+  const cur = state.currentLesson;
+  if ((cur.practice || {})._loading) return; // still streaming, ignore
+
+  const idx = mod.lessons.findIndex(l => l.id === cur.id);
+  const total = mod.lessons.length;
+  if (idx < 0) return;
+
+  const isLast = idx >= total - 1;
+  if (isLast) {
+    // Last lesson → mark complete + celebrate. Stays at 100%.
+    _setProgress(100);
+    celebrate();
+    return;
+  }
+
   const nextStub = mod.lessons[idx + 1];
   const cached = (state.lessonCache || {})[nextStub.id];
   if (cached) {
     state.currentLesson = cached;
+    _setProgress(Math.round(((idx + 1) / total) * 100));
     applyLessonToView(cached);
+    setOrbState('thinking');
+    orbBubble('Hai să mai vedem un pas.');
+    gsap.fromTo('.lesson-card', { x: 0 }, { x: -8, duration: .15, yoyo: true, repeat: 1, ease: 'power1.inOut' });
   } else {
-    // Not yet prefetched — fire it off and stay on current lesson;
-    // by the time the user clicks again it should be ready.
+    // Not prefetched yet — show skeleton + fetch foreground.
+    state.currentLesson = {
+      id: nextStub.id,
+      index: nextStub.index || idx + 2,
+      title: nextStub.title,
+      body: '',
+      practice: { hook: '', exercises: [], _loading: true },
+    };
+    _setProgress(Math.round(((idx + 1) / total) * 100));
+    applyLessonToView(state.currentLesson);
     api.generateLesson(nextStub.id).then(full => {
       if (full) {
         state.lessonCache = state.lessonCache || {};
         state.lessonCache[nextStub.id] = full;
+        // Only swap in if user is still on this lesson.
+        if (state.currentLesson && state.currentLesson.id === full.id) {
+          state.currentLesson = full;
+          applyLessonToView(full);
+        }
+      }
+    }).catch(() => {});
+  }
+}
+
+function _onPrevStepClick() {
+  const mod = state.generatedModule;
+  if (!mod || !mod.lessons || !state.currentLesson) return;
+  const idx = mod.lessons.findIndex(l => l.id === state.currentLesson.id);
+  if (idx <= 0) return; // already at first
+  const total = mod.lessons.length;
+  const prevStub = mod.lessons[idx - 1];
+  const cached = (state.lessonCache || {})[prevStub.id];
+  if (cached) {
+    state.currentLesson = cached;
+    _setProgress(Math.round((idx - 1) / total * 100));
+    applyLessonToView(cached);
+    orbBubble('Bine. Recitim partea aceea.');
+  } else {
+    // Should generally be cached (prev means we already saw it once).
+    // Fall back to refetch if needed.
+    api.generateLesson(prevStub.id).then(full => {
+      if (full) {
+        state.lessonCache = state.lessonCache || {};
+        state.lessonCache[prevStub.id] = full;
+        state.currentLesson = full;
+        _setProgress(Math.round((idx - 1) / total * 100));
+        applyLessonToView(full);
       }
     });
   }
+}
+
+function _setProgress(pct) {
+  state.progress = Math.max(0, Math.min(100, pct));
+  Store.get().lessonProgress = state.progress;
+  Store.save();
+  const fill = $('#progressFill');
+  const text = $('#progressPct');
+  if (fill) fill.style.width = state.progress + '%';
+  if (text) text.textContent = state.progress + '%';
+}
+
+// Bind hint + verify handlers for the dynamically rendered exercise.
+// Validation happens client-side against ex.blanks / ex.answer / ex.expected.
+function _bindPracticeHandlers(ex) {
+  if (!ex) return;
+  const card = $('.view-lesson .lesson-card');
+  if (!card) return;
+
+  const hintBtn = card.querySelector('#hintBtn');
+  const hint = card.querySelector('#practiceHint');
+  if (hintBtn && hint) {
+    hintBtn.addEventListener('click', () => {
+      const open = !hint.hasAttribute('hidden');
+      if (open) {
+        hint.setAttribute('hidden', '');
+        hintBtn.textContent = 'Indiciu';
+      } else {
+        hint.removeAttribute('hidden');
+        hintBtn.textContent = 'Ascunde indiciul';
+        if (window.gsap) gsap.from(hint, { opacity: 0, y: 4, duration: .3, ease: 'power2.out' });
+        setOrbState('listening');
+        orbBubble('Indiciu mic, nu răspuns. Tu trebuie să legi punctele.');
+      }
+    });
+  }
+
+  const fb = card.querySelector('#practiceFeedback');
+  const showFb = (ok, msg) => {
+    if (!fb) return;
+    fb.textContent = msg;
+    fb.classList.toggle('is-correct', !!ok);
+    fb.classList.toggle('is-wrong', !ok);
+    fb.removeAttribute('hidden');
+  };
+
+  // Choice exercises validate on click.
+  if (ex.type === 'choice') {
+    const ans = typeof ex.answer === 'number' ? ex.answer : -1;
+    card.querySelectorAll('.choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.dataset.i, 10);
+        card.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('is-correct', 'is-wrong'));
+        if (i === ans) {
+          btn.classList.add('is-correct');
+          showFb(true, ex.feedback_ok || 'Exact. Răspuns corect.');
+          orbBurst();
+          orbBubble('Bine. Mai vine o lecție.');
+          showToast('+12 XP · răspuns corect', '✓');
+        } else {
+          btn.classList.add('is-wrong');
+          showFb(false, ex.feedback_wrong || 'Aproape — încearcă din nou.');
+          setOrbState('confused');
+        }
+      });
+    });
+    return;
+  }
+
+  // Fill / code: validate on Verifică click.
+  const checkBtn = card.querySelector('#checkAnswer');
+  if (!checkBtn) return;
+  checkBtn.addEventListener('click', () => {
+    if (ex.type === 'fill') {
+      const inputs = Array.from(card.querySelectorAll('.blank-input'));
+      const expected = (ex.blanks || []).map(b => norm(b));
+      const got = inputs.map(i => norm(i.value));
+      let allOk = expected.length > 0 && got.length === expected.length;
+      inputs.forEach((inp, i) => {
+        inp.classList.remove('is-correct', 'is-wrong');
+        const ok = expected[i] && got[i] && got[i] === expected[i];
+        inp.classList.add(ok ? 'is-correct' : 'is-wrong');
+        if (!ok) allOk = false;
+      });
+      if (allOk) {
+        showFb(true, ex.feedback_ok || 'Bravo, ai prins ideea.');
+        orbBurst();
+        orbBubble('Exact. Ți-ai prins ideea.');
+        showToast('+12 XP · răspuns corect', '✓');
+      } else {
+        showFb(false, ex.feedback_wrong || 'Mai încearcă — verifică ce-ai scris în fiecare câmp.');
+        setOrbState('confused');
+      }
+    } else if (ex.type === 'code') {
+      const ta = card.querySelector('.code-area');
+      const want = norm(ex.expected || ex.solution || '');
+      const got = norm(ta ? ta.value : '');
+      if (!want) {
+        // No expected provided — just acknowledge effort.
+        showFb(true, 'Codul tău e salvat. Continuă lecția când vrei.');
+        return;
+      }
+      // Forgiving: compare without whitespace differences.
+      const ok = got.replace(/\s+/g, ' ') === want.replace(/\s+/g, ' ');
+      ta.classList.remove('is-correct', 'is-wrong');
+      ta.classList.add(ok ? 'is-correct' : 'is-wrong');
+      if (ok) {
+        showFb(true, ex.feedback_ok || 'Exact. Codul tău e corect.');
+        orbBurst();
+        showToast('+15 XP · cod corect', '✓');
+      } else {
+        showFb(false, ex.feedback_wrong || 'Aproape — verifică sintaxa și încearcă din nou.');
+        setOrbState('confused');
+      }
+    }
+  });
+}
+
+function norm(s) {
+  return String(s || '').trim().toLowerCase();
 }
 
 function startStreamCanvas(canvas) {
@@ -1041,95 +1221,14 @@ function initLesson() {
     });
   });
 
-  $('#progressFill').style.width = state.progress + '%';
-  $('#progressPct').textContent = state.progress + '%';
-
-  const nextBtn = $('#nextStep');
-  if (nextBtn && !nextBtn.dataset.bound) {
-    nextBtn.dataset.bound = '1';
-    nextBtn.addEventListener('click', () => {
-      state.progress = Math.min(100, state.progress + 8);
-      Store.get().lessonProgress = state.progress;
-      Store.save();
-      $('#progressFill').style.width = state.progress + '%';
-      $('#progressPct').textContent = state.progress + '%';
-      if (state.progress < 100) {
-        setOrbState('thinking');
-        orbBubble('Hai să mai vedem un pas.');
-      }
-      gsap.fromTo('.lesson-card', { x: 0 }, { x: -8, duration: .15, yoyo: true, repeat: 1, ease: 'power1.inOut' });
-      if (state.progress >= 100) {
-        celebrate();
-      }
-    });
-  }
-  const prevBtn = $('#prevStep');
-  if (prevBtn && !prevBtn.dataset.bound) {
-    prevBtn.dataset.bound = '1';
-    prevBtn.addEventListener('click', () => {
-      state.progress = Math.max(0, state.progress - 8);
-      Store.get().lessonProgress = state.progress;
-      Store.save();
-      $('#progressFill').style.width = state.progress + '%';
-      $('#progressPct').textContent = state.progress + '%';
-      orbBubble('Bine. Recitim partea aceea.');
-    });
-  }
-
-  const checkBtn = $('#checkAnswer');
-  if (checkBtn && !checkBtn.dataset.bound) {
-    checkBtn.dataset.bound = '1';
-    checkBtn.addEventListener('click', () => {
-      const a = $('#answerParam');
-      const b = $('#answerVar');
-      if (!a || !b) return;
-      const va = (a.value || '').trim().toLowerCase();
-      const vb = (b.value || '').trim().toLowerCase();
-      const correctParam = ['nume', 'name', 'n'];
-      const okA = correctParam.includes(va) && va.length > 0;
-      const okB = vb === va && vb.length > 0;
-      a.classList.remove('is-correct', 'is-wrong');
-      b.classList.remove('is-correct', 'is-wrong');
-      if (okA && okB) {
-        a.classList.add('is-correct');
-        b.classList.add('is-correct');
-        orbBurst();
-        orbBubble('Exact. Ți-ai prins ideea.');
-        showToast('+12 XP · răspuns corect', '✓');
-      } else if (!va || !vb) {
-        setOrbState('confused');
-        orbBubble('Pune ceva în fiecare câmp — nu e nicio greșeală să ghicim.');
-        if (!va) a.classList.add('is-wrong');
-        if (!vb) b.classList.add('is-wrong');
-      } else {
-        a.classList.add(okA ? 'is-correct' : 'is-wrong');
-        b.classList.add(okB ? 'is-correct' : 'is-wrong');
-        setOrbState('confused');
-        orbBubble(va !== vb
-          ? 'Aproape — verifică că folosești același nume în ambele locuri.'
-          : 'Mai încearcă — gândește-te ce nume scurt are sens pentru o persoană salutată.');
-      }
-    });
-  }
-
-  const hintBtn = $('#hintBtn');
-  const hint = $('#practiceHint');
-  if (hintBtn && hint && !hintBtn.dataset.bound) {
-    hintBtn.dataset.bound = '1';
-    hintBtn.addEventListener('click', () => {
-      const open = !hint.hasAttribute('hidden');
-      if (open) {
-        hint.setAttribute('hidden', '');
-        hintBtn.textContent = 'Indiciu';
-      } else {
-        hint.removeAttribute('hidden');
-        hintBtn.textContent = 'Ascunde indiciul';
-        gsap.from(hint, { opacity: 0, y: 4, duration: .3, ease: 'power2.out' });
-        setOrbState('listening');
-        orbBubble('Indiciu mic, nu răspuns. Tu trebuie să legăm punctele.');
-      }
-    });
-  }
+  // Render the current progress (could be 0 on first visit, or whatever
+  // the user left at). Step buttons are bound by applyLessonToView via
+  // _bindLessonStepButtons — DON'T re-bind them here, that caused the
+  // double-handler bug where Next did nothing.
+  const fill = $('#progressFill');
+  const text = $('#progressPct');
+  if (fill) fill.style.width = state.progress + '%';
+  if (text) text.textContent = state.progress + '%';
 }
 
 function orbBubble(text) {
@@ -1563,10 +1662,15 @@ function closeCelebrate() {
   const overlay = $('#celebrate');
   if (_orbBoomTimer) { clearTimeout(_orbBoomTimer); _orbBoomTimer = null; }
   if (celebrateFx) { celebrateFx.stop(); celebrateFx = null; }
+  // After celebrating module completion, the user shouldn't land back
+  // inside a 100%-completed lesson (clicking Next there does nothing).
+  // Reset progress + return to home so they can start a new course or
+  // pick up another module.
+  _setProgress(0);
   gsap.to(overlay, { opacity: 0, duration: .25, onComplete: () => {
     overlay.classList.remove('is-on');
-    moveOrbToHost('lesson');
     setOrbState('idle');
+    showView('home');
   }});
 }
 
@@ -1786,20 +1890,127 @@ $('#masteredSearch')?.addEventListener('input', (e) => {
 });
 
 // =========================================================
-// HOME — refresh dynamic content from latest stats
+// HOME — refresh dynamic content from latest stats + module
 // =========================================================
 async function refreshHome() {
   if (!Auth.isLoggedIn()) return;
+
+  // Avatar + greeting (uses Auth.user — instant, doesn't wait on API).
+  const u = Auth.user;
+  const name = (u && u.name) ? u.name.split(' ')[0] : '';
+  const initial = (u && u.name && u.name[0]) ? u.name[0].toUpperCase() : '?';
+  $$('[data-avatar]').forEach(el => el.textContent = initial);
+
+  const greeting = $('[data-home-greeting]');
+  if (greeting) {
+    greeting.innerHTML = name
+      ? `<em>Bună,</em> ${escapeHtml(name)}.<br/><span class="muted-soft"><em>Hai</em> să continuăm.</span>`
+      : `<em>Bună.</em><br/><span class="muted-soft"><em>Hai</em> să începem.</span>`;
+  }
+
+  const eyebrow = $('[data-home-eyebrow]');
+  if (eyebrow) eyebrow.textContent = _humanGreetingTime();
+
+  // Continue card — only show if there's a generated module in progress.
+  const cont = $('[data-home-continue]');
+  const empty = $('[data-home-continue-empty]');
+  const lead = $('[data-home-lead]');
+  const recentSection = $('[data-home-recent-section]');
+  const recentList = $('[data-home-recent-list]');
+
+  const mod = state.generatedModule;
+  if (mod && mod.lessons && mod.lessons.length && state.currentLesson) {
+    const idx = mod.lessons.findIndex(l => l.id === state.currentLesson.id);
+    const total = mod.lessons.length;
+    const pct = state.progress || 0;
+    if (cont) cont.removeAttribute('hidden');
+    if (empty) empty.setAttribute('hidden', '');
+    if (lead) {
+      lead.innerHTML = `Ai rămas la <em>${escapeHtml(state.currentLesson.title || 'lecția curentă')}</em>. Mai ai <b>${Math.max(0, total - idx - 1)}</b> ${total - idx - 1 === 1 ? 'lecție' : 'lecții'} până la finalul modulului.`;
+    }
+    const meta = $('[data-home-continue-meta]');
+    const title = $('[data-home-continue-title]');
+    const fill = $('[data-home-continue-fill]');
+    const pctLabel = $('[data-home-continue-pct]');
+    if (meta) meta.textContent = `MODULUL ${escapeHtml(mod.title || '')} · LECȚIA ${idx >= 0 ? idx + 1 : 1}`;
+    if (title) title.innerHTML = `<em>${escapeHtml((state.currentLesson.title || '').split(' ')[0] || 'Continuă')}</em> ${escapeHtml((state.currentLesson.title || '').split(' ').slice(1).join(' '))}`;
+    if (fill) fill.style.width = pct + '%';
+    if (pctLabel) pctLabel.textContent = `${pct}% din modul`;
+
+    // Recent list shows all lessons with status (current / done / pending).
+    if (recentSection) recentSection.removeAttribute('hidden');
+    if (recentList) {
+      recentList.innerHTML = mod.lessons.map((l, i) => {
+        const isCurrent = i === idx;
+        const isDone = i < idx;
+        const status = isCurrent ? 'status-active' : (isDone ? 'status-done' : '');
+        const symbol = isCurrent ? '●' : (isDone ? '✓' : '·');
+        const meta = isCurrent ? `${pct}% terminat` : (isDone ? '✓ gata' : '~5 min · în așteptare');
+        return `
+          <button class="recent-item" data-recent-idx="${i}">
+            <span class="recent-num">L${i + 1}</span>
+            <span class="recent-title">${escapeHtml(l.title || `Lecția ${i + 1}`)}</span>
+            <span class="recent-meta">${meta}</span>
+            <span class="recent-status ${status}">${symbol}</span>
+          </button>
+        `;
+      }).join('');
+      recentList.querySelectorAll('[data-recent-idx]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const i = parseInt(btn.dataset.recentIdx, 10);
+          const stub = mod.lessons[i];
+          if (!stub) return;
+          let lesson = (state.lessonCache || {})[stub.id];
+          if (!lesson) {
+            lesson = await api.generateLesson(stub.id).catch(() => null);
+            if (lesson) {
+              state.lessonCache = state.lessonCache || {};
+              state.lessonCache[stub.id] = lesson;
+            }
+          }
+          if (lesson) {
+            state.currentLesson = lesson;
+            _setProgress(Math.round((i / mod.lessons.length) * 100));
+            showView('lesson');
+          }
+        });
+      });
+    }
+  } else {
+    if (cont) cont.setAttribute('hidden', '');
+    if (empty) empty.removeAttribute('hidden');
+    if (lead) lead.innerHTML = 'Generează primul tău curs ca să începem. Wispucci scrie totul pe loc, în câteva secunde.';
+    if (recentSection) recentSection.setAttribute('hidden', '');
+    if (recentList) recentList.innerHTML = '';
+  }
+
+  // Stats from API.
   let stats;
   try { stats = await api.stats(); state.statsCache = stats; }
   catch (_) { return; }
+  // Aggregate lesson counts from by_subject
+  const subjects = (stats.lessons && stats.lessons.by_subject) || [];
+  const lessonsDone = subjects.reduce((s, x) => s + (x.completed || 0), 0);
+  const lessonsStarted = subjects.reduce((s, x) => s + (x.started || 0), 0);
   $$('[data-streak]').forEach(el => el.textContent = stats.streak.current);
+  $$('[data-stat-streak-num]').forEach(el => el.textContent = stats.streak.current);
+  $$('[data-stat-streak-longest]').forEach(el => el.textContent = stats.streak.longest);
+  $$('[data-stat-week-xp]').forEach(el => el.textContent = stats.xp.week);
+  $$('[data-stat-today-xp]').forEach(el => el.textContent = stats.xp.today);
+  $$('[data-stat-lessons-done]').forEach(el => el.textContent = lessonsDone);
+  $$('[data-stat-lessons-total]').forEach(el => el.textContent = lessonsStarted);
+  $$('[data-stat-modules]').forEach(el => el.textContent = subjects.length);
   $$('[data-mastered-total]').forEach(el => el.textContent = stats.mastered.total);
   $$('[data-mastered-new]').forEach(el => el.textContent = stats.mastered.new_today);
-  // Avatar initial
-  const u = Auth.user;
-  const initial = (u && u.name && u.name[0]) ? u.name[0].toUpperCase() : '?';
-  $$('[data-avatar]').forEach(el => el.textContent = initial);
+  $$('[data-celebrate-xp]').forEach(el => el.innerHTML = `+${stats.xp.today || 0} XP <span class="muted">· streak <span data-celebrate-streak>${stats.streak.current}</span> zile</span>`);
+}
+
+function _humanGreetingTime() {
+  const d = new Date();
+  const days = ['duminică', 'luni', 'marți', 'miercuri', 'joi', 'vineri', 'sâmbătă'];
+  const h = d.getHours();
+  const part = h < 5 ? 'noapte' : (h < 12 ? 'dimineața' : (h < 18 ? 'după-amiaza' : 'seara'));
+  return `${days[d.getDay()]} · ${h}:${String(d.getMinutes()).padStart(2, '0')} ${part}`;
 }
 
 // =========================================================

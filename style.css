@@ -2679,6 +2679,34 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   border-radius: 3px;
 }
 
+.practice-feedback {
+  margin-top: var(--s-2);
+  font-size: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.practice-feedback.is-correct {
+  color: #c9f5d6;
+  background: rgba(58, 188, 110, .12);
+  border-color: rgba(58, 188, 110, .35);
+}
+.practice-feedback.is-wrong {
+  color: #fad7d2;
+  background: rgba(220, 88, 73, .12);
+  border-color: rgba(220, 88, 73, .35);
+}
+
+.home-continue-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.home-continue-empty .btn {
+  align-self: flex-start;
+}
+
 /* btn-ghost generic active state */
 .btn-ghost.is-on {
   background: rgba(239,221,141,.18);
