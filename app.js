@@ -802,6 +802,26 @@ function applyLessonToView(lesson) {
   const card = $('.view-lesson .lesson-card');
   if (!card) return;
 
+  // Reset to first stage when entering a new lesson. Hide locked tabs
+  // (Exercițiu / Joc) so they reveal one at a time as user clicks Next.
+  // Note tab is always visible (it's a side action, not part of the flow).
+  const stages = _lessonStages(lesson);
+  $$('.lesson-card .tab').forEach(tab => {
+    const t = tab.dataset.tab;
+    if (t === 'theory' || t === 'notes') {
+      tab.removeAttribute('hidden');
+    } else if (stages.includes(t)) {
+      // Will be revealed as user advances.
+      tab.setAttribute('hidden', '');
+    } else {
+      // Stage doesn't apply to this lesson at all.
+      tab.setAttribute('hidden', '');
+    }
+  });
+  state.currentStage = 'theory';
+  $$('.lesson-card .tab').forEach(t => t.classList.toggle('is-active', t.dataset.tab === 'theory'));
+  $$('.lesson-card .tab-pane').forEach(p => p.classList.toggle('is-active', p.dataset.pane === 'theory'));
+
   const practice = lesson.practice || {};
   const hook = practice.hook || '';
   const body = lesson.body || '';
@@ -858,14 +878,14 @@ function applyLessonToView(lesson) {
         }
       });
     }
-    parts.push(`
-      <div class="lesson-foot">
-        <button class="btn-ghost" id="prevStep" ${practice._loading ? 'disabled' : ''}>← Pasul anterior</button>
-        <button class="btn btn-primary" id="nextStep" ${practice._loading ? 'disabled' : ''}>Pas următor →</button>
-      </div>
-    `);
     theory.innerHTML = parts.join('\n');
   }
+
+  // Update the persistent lesson-nav buttons' disabled state.
+  const prevB = $('#prevStep');
+  const nextB = $('#nextStep');
+  if (prevB) prevB.disabled = !!practice._loading;
+  if (nextB) nextB.disabled = !!practice._loading;
 
   // ── practice pane (first exercise of type fill/code/choice)
   const practicePane = card.querySelector('[data-pane="practice"]');
@@ -925,6 +945,9 @@ function applyLessonToView(lesson) {
   // Re-bind nextStep / prevStep handlers because we replaced the DOM nodes.
   _bindLessonStepButtons();
 
+  // Refresh button labels for the current stage (Teorie on entry).
+  _refreshStepButtonLabels();
+
   // Trigger mini-game lazy-load on next visit to that tab.
   _miniGameLoaded = false;
 }
@@ -948,19 +971,112 @@ function _bindLessonStepButtons() {
   }
 }
 
+// Stage-aware navigation: each lesson goes Teorie → Exercițiu → Joc
+// (skipping stages with no content). Pas următor on the last available
+// stage advances to the next lesson (and bumps module progress 25%).
+// Pasul anterior on the first stage rewinds to the previous lesson's
+// last available stage. Note tab is always reachable, doesn't gate flow.
+function _lessonStages(lesson) {
+  const stages = ['theory'];
+  const hasPractice = lesson && lesson.practice
+    && Array.isArray(lesson.practice.exercises)
+    && lesson.practice.exercises.length > 0;
+  const hasGame = lesson && lesson.practice && lesson.practice.mini_game;
+  if (hasPractice) stages.push('practice');
+  if (hasGame) stages.push('game');
+  return stages;
+}
+
+function _switchToStage(stageName, opts = {}) {
+  const reveal = opts.reveal !== false;
+  state.currentStage = stageName;
+  $$('.lesson-card .tab').forEach(tab => {
+    const isThis = tab.dataset.tab === stageName;
+    tab.classList.toggle('is-active', isThis);
+    // Reveal the tab if we navigated into it (so it's discoverable).
+    if (isThis && reveal && tab.hasAttribute('hidden')) {
+      tab.removeAttribute('hidden');
+      tab.classList.remove('tab-revealed');
+      // Force reflow so the animation re-runs.
+      void tab.offsetWidth;
+      tab.classList.add('tab-revealed');
+    }
+  });
+  $$('.lesson-card .tab-pane').forEach(p => {
+    p.classList.toggle('is-active', p.dataset.pane === stageName);
+  });
+  if (window.gsap) {
+    gsap.from('.tab-pane.is-active', { opacity: 0, y: 6, duration: .3, ease: 'power2.out' });
+  }
+  if (stageName === 'game') ensureMiniGameLoaded();
+  _refreshStepButtonLabels();
+}
+
+// Swap "Pas următor" / "Pasul anterior" labels so the user knows what
+// the next click will do (next stage vs. next lesson vs. finish module).
+function _refreshStepButtonLabels() {
+  const cur = state.currentLesson;
+  const mod = state.generatedModule;
+  if (!cur || !mod || !mod.lessons) return;
+  const stages = _lessonStages(cur);
+  const sIdx = Math.max(0, stages.indexOf(state.currentStage || 'theory'));
+  const lIdx = mod.lessons.findIndex(l => l.id === cur.id);
+  const isLastStage = sIdx >= stages.length - 1;
+  const isLastLesson = lIdx >= mod.lessons.length - 1;
+
+  const next = $('#nextStep');
+  if (next) {
+    if (isLastStage && isLastLesson) {
+      next.textContent = 'Finalizează modulul ✦';
+    } else if (isLastStage) {
+      next.textContent = 'Lecția următoare →';
+    } else if (stages[sIdx + 1] === 'practice') {
+      next.textContent = 'Treci la exercițiu →';
+    } else if (stages[sIdx + 1] === 'game') {
+      next.textContent = 'Treci la joc →';
+    } else {
+      next.textContent = 'Pas următor →';
+    }
+  }
+  const prev = $('#prevStep');
+  if (prev) {
+    const isFirstStage = sIdx === 0;
+    const isFirstLesson = lIdx <= 0;
+    prev.disabled = isFirstStage && isFirstLesson;
+    if (isFirstStage) {
+      prev.textContent = isFirstLesson ? '← Început' : '← Lecția anterioară';
+    } else {
+      prev.textContent = '← Pasul anterior';
+    }
+  }
+}
+
 function _onNextStepClick() {
   const mod = state.generatedModule;
   if (!mod || !mod.lessons || !state.currentLesson) return;
   const cur = state.currentLesson;
   if ((cur.practice || {})._loading) return; // still streaming, ignore
 
+  const stages = _lessonStages(cur);
+  const stageIdx = Math.max(0, stages.indexOf(state.currentStage || 'theory'));
+  // Are there more stages within this lesson? If so, advance stage only.
+  if (stageIdx < stages.length - 1) {
+    const next = stages[stageIdx + 1];
+    _switchToStage(next);
+    setOrbState('thinking');
+    if (next === 'practice') orbBubble('Acum aplicăm ce am citit.');
+    else if (next === 'game') orbBubble('Hai să facem ceva interactiv.');
+    return;
+  }
+
+  // Otherwise advance to the next lesson.
   const idx = mod.lessons.findIndex(l => l.id === cur.id);
   const total = mod.lessons.length;
   if (idx < 0) return;
 
   const isLast = idx >= total - 1;
   if (isLast) {
-    // Last lesson → mark complete + celebrate. Stays at 100%.
+    // Last lesson, last stage → mark complete + celebrate. Stays at 100%.
     _setProgress(100);
     celebrate();
     return;
@@ -1003,8 +1119,19 @@ function _onNextStepClick() {
 function _onPrevStepClick() {
   const mod = state.generatedModule;
   if (!mod || !mod.lessons || !state.currentLesson) return;
-  const idx = mod.lessons.findIndex(l => l.id === state.currentLesson.id);
-  if (idx <= 0) return; // already at first
+  const cur = state.currentLesson;
+  const stages = _lessonStages(cur);
+  const stageIdx = Math.max(0, stages.indexOf(state.currentStage || 'theory'));
+  // Within the lesson, rewind stages first.
+  if (stageIdx > 0) {
+    _switchToStage(stages[stageIdx - 1], { reveal: false });
+    orbBubble('Recitim asta.');
+    return;
+  }
+  // First stage → go to previous lesson, jump straight to its LAST stage
+  // (so user lands on the most recent thing they were doing).
+  const idx = mod.lessons.findIndex(l => l.id === cur.id);
+  if (idx <= 0) return; // already at first lesson, first stage
   const total = mod.lessons.length;
   const prevStub = mod.lessons[idx - 1];
   const cached = (state.lessonCache || {})[prevStub.id];
@@ -1012,10 +1139,17 @@ function _onPrevStepClick() {
     state.currentLesson = cached;
     _setProgress(Math.round((idx - 1) / total * 100));
     applyLessonToView(cached);
+    // Land on the last stage of the prev lesson.
+    const prevStages = _lessonStages(cached);
+    _switchToStage(prevStages[prevStages.length - 1]);
+    // Reveal all already-walked tabs for the previous lesson so the user
+    // can hop between stages without forcing a re-walk.
+    prevStages.forEach(s => {
+      const t = $(`.lesson-card .tab[data-tab="${s}"]`);
+      if (t) t.removeAttribute('hidden');
+    });
     orbBubble('Bine. Recitim partea aceea.');
   } else {
-    // Should generally be cached (prev means we already saw it once).
-    // Fall back to refetch if needed.
     api.generateLesson(prevStub.id).then(full => {
       if (full) {
         state.lessonCache = state.lessonCache || {};
@@ -1023,6 +1157,12 @@ function _onPrevStepClick() {
         state.currentLesson = full;
         _setProgress(Math.round((idx - 1) / total * 100));
         applyLessonToView(full);
+        const prevStages = _lessonStages(full);
+        _switchToStage(prevStages[prevStages.length - 1]);
+        prevStages.forEach(s => {
+          const t = $(`.lesson-card .tab[data-tab="${s}"]`);
+          if (t) t.removeAttribute('hidden');
+        });
       }
     });
   }
@@ -1213,11 +1353,9 @@ function initLesson() {
     if (tab.dataset.bound) return;
     tab.dataset.bound = '1';
     tab.addEventListener('click', () => {
-      const t = tab.dataset.tab;
-      $$('.lesson-card .tab').forEach(x => x.classList.toggle('is-active', x === tab));
-      $$('.lesson-card .tab-pane').forEach(p => p.classList.toggle('is-active', p.dataset.pane === t));
-      gsap.from('.tab-pane.is-active', { opacity: 0, y: 6, duration: .35, ease: 'power2.out' });
-      if (t === 'game') ensureMiniGameLoaded();
+      // Don't let users click into hidden/locked tabs.
+      if (tab.hasAttribute('hidden')) return;
+      _switchToStage(tab.dataset.tab, { reveal: false });
     });
   });
 

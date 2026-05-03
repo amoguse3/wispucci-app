@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./style.css?v=23" />
+<link rel="stylesheet" href="./style.css?v=25" />
 </head>
 <body>
 
@@ -88,10 +88,8 @@
       <div class="orb-core">
         <div class="orb-shine"></div>
         <svg class="orb-face" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-          <g class="face-brows">
-            <path class="brow brow-l" d="M 30 38 Q 38 35 46 38" fill="none" stroke-linecap="round"/>
-            <path class="brow brow-r" d="M 54 38 Q 62 35 70 38" fill="none" stroke-linecap="round"/>
-          </g>
+          <!-- Eyebrows removed at user's request — keeps the orb face minimal. -->
+          <g class="face-brows" hidden></g>
           <g class="face-eyes">
             <ellipse class="eye eye-l" cx="38" cy="50" rx="3.6" ry="5.4"/>
             <ellipse class="eye eye-r" cx="62" cy="50" rx="3.6" ry="5.4"/>
@@ -468,9 +466,9 @@
       <article class="lesson-card">
         <div class="tabs">
           <button class="tab is-active" data-tab="theory">Teorie</button>
-          <button class="tab" data-tab="game">Joc</button>
-          <button class="tab" data-tab="practice">Exercițiu</button>
-          <button class="tab" data-tab="notes">Note</button>
+          <button class="tab" data-tab="practice" hidden>Exercițiu</button>
+          <button class="tab" data-tab="game" hidden>Joc</button>
+          <button class="tab tab-side" data-tab="notes" title="Notele tale">Note</button>
         </div>
 
         <div class="tab-pane is-active" data-pane="theory">
@@ -480,10 +478,6 @@
           <div class="skeleton-line" style="width:90%"></div>
           <div class="skeleton-line" style="width:80%"></div>
           <div class="skeleton-line" style="width:70%"></div>
-          <div class="lesson-foot">
-            <button class="btn-ghost" id="prevStep" disabled>← Pasul anterior</button>
-            <button class="btn btn-primary" id="nextStep" disabled>Pas următor →</button>
-          </div>
         </div>
 
         <div class="tab-pane" data-pane="game">
@@ -503,6 +497,12 @@
           <h3 class="lesson-title"><em>Notele</em> tale</h3>
           <p class="lesson-body muted">Scrie cu mâna ta ce ai înțeles. Aceste note rămân ale tale.</p>
           <textarea class="notes-area" placeholder="Funcția primește o valoare prin paranteze. Numele din paranteze e parametrul, valoarea efectivă e argumentul…"></textarea>
+        </div>
+
+        <!-- Persistent card-level nav (always visible across stages) -->
+        <div class="lesson-nav">
+          <button class="btn-ghost" id="prevStep" disabled>← Pasul anterior</button>
+          <button class="btn btn-primary" id="nextStep" disabled>Pas următor →</button>
         </div>
       </article>
     </main>
@@ -778,6 +778,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/Flip.min.js"></script>
-<script src="./app.js?v=23"></script>
+<script src="./app.js?v=25"></script>
 </body>
 </html>

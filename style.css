@@ -1274,6 +1274,22 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 }
 .tab:hover { color: var(--text-2); }
 .tab.is-active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+/* HTML `hidden` must beat the .tab display rule. */
+.tab[hidden] { display: none !important; }
+/* Note tab is always reachable but visually demoted as a side action. */
+.tab-side {
+  margin-left: auto;
+  color: var(--text-3);
+  opacity: .7;
+  font-weight: 400;
+}
+.tab-side:hover { opacity: 1; }
+/* Locked / future tabs slide in. */
+@keyframes tabReveal {
+  from { opacity: 0; transform: translateX(-6px) scale(.92); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+.tab.tab-revealed { animation: tabReveal .35s ease-out; }
 
 .tab-pane {
   display: none;
@@ -1367,6 +1383,22 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
   margin-top: auto;
   padding-top: var(--s-5);
   border-top: 1px solid var(--line-soft);
+}
+
+/* Persistent card nav — pinned to bottom of lesson card, visible across all stages. */
+.lesson-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--s-4) var(--s-7);
+  border-top: 1px solid var(--line-soft);
+  flex-shrink: 0;
+  background: linear-gradient(180deg, transparent, rgba(0,0,0,0.15));
+}
+.lesson-nav .btn:disabled,
+.lesson-nav .btn-ghost:disabled {
+  opacity: .35;
+  cursor: not-allowed;
 }
 
 .notes-area {
@@ -2705,6 +2737,12 @@ li.is-done   .gen-status-text::before { content: "✓ gata"; color: var(--accent
 }
 .home-continue-empty .btn {
   align-self: flex-start;
+}
+/* HTML `hidden` must beat the .home-continue display: flex rule. */
+.home-continue[hidden],
+.home-continue-empty[hidden],
+[data-home-recent-section][hidden] {
+  display: none !important;
 }
 
 /* btn-ghost generic active state */
