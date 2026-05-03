@@ -323,6 +323,155 @@ async def generate_course(
 
 
 # ═══════════════════════════════════════════════════════════
+# SKILL 4b — TWO-PASS COURSE GENERATION
+# (OUTLINE FIRST → user sees structure in ~2-3s,
+#  per-lesson content generated on demand / prefetched in background)
+# ═══════════════════════════════════════════════════════════
+
+OUTLINE_SYSTEM = """Ești Wispucci, tutor EdTech pentru Gen Z (12-25 ani).
+{tone_line}
+{subject_line}
+
+Generează DOAR scheletul cursului — titluri și subiecte scurte.
+NU genera body, NU exerciții, NU mini-game. Doar structura.
+
+Output STRICT JSON:
+{
+  "title": "Titlu modul (max 40 char, captivant, NU 'Curs de Python')",
+  "lessons": [
+    {
+      "title": "titlu scurt cu verb (max 36 char)",
+      "subject": "ce acoperă în 6-10 cuvinte",
+      "tags": ["3-4 keywords scurte"],
+      "minutes": 5
+    }
+  ]
+}
+
+Lecțiile merg de la BAZĂ → APLICAȚIE PRACTICĂ. Prima lecție răspunde
+la 'de ce contează'. Ultima — proiect mic concret. Tags = key concepts."""
+
+
+async def generate_course_outline(
+    subject: str,
+    topic: str,
+    level: int,
+    lesson_count: int = 4,
+    tone: str = "cald",
+) -> dict:
+    """
+    Fast first pass: returns just module title + lesson titles + tags.
+    Token budget: ~250 in / ~250 out → ~$0.0001, ~2-3s wall clock.
+    Used to populate the gen-screen so the user sees structure in <3s
+    while the per-lesson content is fetched lazily.
+    """
+    system = (
+        OUTLINE_SYSTEM
+        .replace("{tone_line}", _tone_line(tone))
+        .replace("{subject_line}", _subject_line(subject))
+    )
+    level_labels = {0: "zero absolut", 1: "începător", 2: "mediu", 3: "avansat"}
+    lvl = level_labels.get(level, "mediu")
+    user = (
+        f"Subiect:{subject}\nTopic:{topic}\nNivel:{lvl}\n"
+        f"Generează schelet de {lesson_count} lecții, hook-driven. "
+        f"Fiecare titlu ≤36 caractere, începe cu verb dacă se poate."
+    )
+    raw = await _call_ai(system, user, json_mode=True, max_tokens=600)
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        result = {}
+
+    # Defensive defaults so the frontend never sees an empty UI.
+    result.setdefault("title", f"{topic} — {subject}")
+    if not isinstance(result.get("lessons"), list) or not result["lessons"]:
+        result["lessons"] = [
+            {
+                "title": f"Lecția {i + 1}",
+                "subject": "intro",
+                "tags": [],
+                "minutes": 5,
+            }
+            for i in range(lesson_count)
+        ]
+    return result
+
+
+LESSON_CONTENT_SYSTEM = """Ești Wispucci, tutor EdTech pentru Gen Z (12-25 ani, atenție 8s).
+{tone_line}
+{subject_line}
+
+Generezi UNA SINGURĂ lecție completă. Nu inventa altele.
+
+Output STRICT JSON, fără text în afara JSON:
+{
+  "hook": "1 propoziție 'de ce-mi pasă' (max 16 cuvinte)",
+  "body": "120-180 cuvinte, 2-3 paragrafe scurte. Limbaj simplu. NU 'evident' / 'trivial'.
+           Strecoară 1 analogie din viața reală sau o glumă mică.",
+  "key_terms": ["2-4 concepte cheie"],
+  "exercises": [
+    {"type":"fill","prompt":"...","blanks":["r1"],"hint":"..."},
+    {"type":"choice","prompt":"...","options":["a","b","c","d"],"answer":0},
+    {"type":"code","prompt":"...","expected":"cod corect","hint":"..."}
+  ],
+  "mini_game": null
+}
+Tipuri exerciții: fill | choice | code | match. 2-3 exerciții, dificultate progresivă.
+mini_game: opțional. Dacă incluzi, alege UN tip:
+  bug_hunter | code_assemble | output_predict | word_match (limbi)
+și respectă schema lor strictă (vezi documentație internă)."""
+
+
+async def generate_lesson_content(
+    subject: str,
+    topic: str,
+    level: int,
+    lesson_title: str,
+    lesson_subject: str,
+    position: int,
+    total: int,
+    tone: str = "cald",
+    include_mini_game: bool = False,
+) -> dict:
+    """
+    Second pass: full content for ONE lesson (body + exercises + optional game).
+    Token budget: ~400 in / ~700 out → ~$0.0004, ~5-8s wall clock.
+
+    Called per-lesson so the first lesson is ready quickly and the rest are
+    prefetched in the background while the user reads lesson 1.
+    """
+    system = (
+        LESSON_CONTENT_SYSTEM
+        .replace("{tone_line}", _tone_line(tone))
+        .replace("{subject_line}", _subject_line(subject))
+    )
+    level_labels = {0: "zero absolut", 1: "începător", 2: "mediu", 3: "avansat"}
+    lvl = level_labels.get(level, "mediu")
+    mg_hint = "Adaugă mini_game (1 obiect, vezi schema)." if include_mini_game else "mini_game = null."
+    user = (
+        f"Subiect:{subject}\nTopic:{topic}\nNivel:{lvl}\n"
+        f"Lecția {position}/{total}: {lesson_title}\n"
+        f"Acoperă: {lesson_subject}\n"
+        f"{mg_hint}"
+    )
+    raw = await _call_ai(system, user, json_mode=True, max_tokens=1400)
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        result = {}
+
+    # Defensive defaults
+    result.setdefault("hook", "")
+    result.setdefault("body", "")
+    result.setdefault("key_terms", [])
+    result.setdefault("exercises", [])
+    if "mini_game" not in result:
+        result["mini_game"] = None
+    return result
+
+
+# ═══════════════════════════════════════════════════════════
 # SKILL 5 — GENERARE MINI-TEST (la fiecare 3 lecții)
 # ═══════════════════════════════════════════════════════════
 

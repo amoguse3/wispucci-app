@@ -78,6 +78,12 @@ const api = {
   login: (body) => apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   me: () => apiFetch('/api/auth/me'),
   buildLesson: (body) => apiFetch('/api/tutor/lesson/build', { method: 'POST', body: JSON.stringify(body) }),
+  // Two-pass generation: outline first (fast, ~2-3s), then per-lesson
+  // content (~5-8s) prefetched in the background while the user reads
+  // lesson 1.
+  buildOutline: (body) => apiFetch('/api/tutor/course/outline', { method: 'POST', body: JSON.stringify(body) }),
+  generateLesson: (lessonId) => apiFetch(`/api/tutor/lesson/${encodeURIComponent(lessonId)}/generate`, { method: 'POST' }),
+  getLesson: (lessonId) => apiFetch(`/api/lessons/${encodeURIComponent(lessonId)}`),
   miniGame: (lessonId, type = 'auto') =>
     apiFetch(`/api/tutor/minigame?lesson_id=${encodeURIComponent(lessonId)}&game_type=${encodeURIComponent(type)}`, { method: 'POST' }),
   miniTest: (moduleId) =>
@@ -424,7 +430,10 @@ function showView(name) {
   // View-specific init
   if (name === 'stats')    renderStats();
   if (name === 'settings') initSettingsView();
-  if (name === 'lesson')   initLesson();
+  if (name === 'lesson') {
+    initLesson();
+    if (state.currentLesson) applyLessonToView(state.currentLesson);
+  }
   if (name === 'home')     refreshHome();
 
   // Drive orb mood
@@ -537,6 +546,36 @@ function humanError(raw) {
 // =========================================================
 let genTl;
 
+// Distraction copy shown while DeepSeek crunches. Cycles ~every 3.5s
+// so the user always has fresh signal that something is happening.
+const _GEN_FACTS = {
+  Programare: [
+    'știai? Python e numit după Monty Python, nu după șarpe.',
+    'fapt: prima eroare „bug" a fost o molie reală în 1947.',
+    'Stack Overflow are 24M+ de întrebări — toate au început cu „de ce nu merge".',
+    'oamenii citesc cod de 10× mai des decât scriu cod.',
+    'cei mai buni programatori șterg mai mult cod decât scriu.',
+  ],
+  'Limbă străină': [
+    'creierul învață limbi mai bine prin context decât prin tabele.',
+    'cei care vorbesc 2+ limbi iau decizii mai bune (studiu UChicago).',
+    'dacă auzi o limbă 30 min/zi — vezi rezultate în 21 de zile.',
+  ],
+  'Matematică': [
+    '„matematica e limba universului" — Galileo. încă valabil.',
+    'demonstrațiile încep mereu cu „să presupunem că nu". apoi spargem.',
+    'dacă blochezi pe o problemă, plimbarea îți dă răspunsul în 70% din cazuri.',
+  ],
+  Altceva: [
+    'aha-momentul vine când conectezi 2 lucruri știute deja.',
+    'creierul consolidează ce ai învățat în primele 4 ore de somn.',
+  ],
+};
+
+function _genFactsFor(subject) {
+  return _GEN_FACTS[subject] || _GEN_FACTS.Altceva;
+}
+
 async function runGeneration() {
   const items = $$('#genList li');
   const fill = $('#genBarFill');
@@ -549,20 +588,46 @@ async function runGeneration() {
   if (thread) gsap.set(thread, { height: '0%' });
   if (pct) pct.textContent = '0%';
 
+  // Reset placeholder titles so a re-run doesn't show a stale module.
+  items.forEach((li, i) => {
+    const t = li.querySelector('.gen-title');
+    const m = li.querySelector('.gen-meta');
+    const tags = li.querySelector('.gen-tags');
+    const status = li.querySelector('.gen-status-text');
+    if (t) t.textContent = `Lecția ${i + 1}`;
+    if (m) m.textContent = '— · —';
+    if (tags) tags.innerHTML = '<span>…</span>';
+    if (status) status.textContent = 'așteaptă';
+  });
+
   const streamCtx = startStreamCanvas(stream);
 
-  // Kick off the real backend call in parallel with the timeline animation
-  const buildPromise = Auth.isLoggedIn()
-    ? api.buildLesson({
+  // Pass 1 — outline (lightweight, ~2-3s). Anonymous users skip the
+  // backend entirely and the timeline plays as a teaser before signup.
+  const outlinePromise = Auth.isLoggedIn()
+    ? api.buildOutline({
         subject: state.subject,
         topic: state.topic,
         level: state.level,
-        lesson_count: 4,
       }).catch(err => {
-        console.warn('build failed', err);
+        console.warn('outline failed', err);
         return null;
       })
     : Promise.resolve(null);
+
+  // Distraction: rotate fun facts in the gen-head subtitle while we wait.
+  const headLead = $('.gen-head .lead');
+  const facts = _genFactsFor(state.subject);
+  let factIdx = 0;
+  let factTimer = null;
+  if (headLead) {
+    headLead.textContent = facts[0];
+    factTimer = setInterval(() => {
+      factIdx = (factIdx + 1) % facts.length;
+      gsap.fromTo(headLead, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: .35 });
+      headLead.textContent = facts[factIdx];
+    }, 3500);
+  }
 
   if (genTl) genTl.kill();
   genTl = gsap.timeline();
@@ -598,22 +663,246 @@ async function runGeneration() {
     });
   });
 
+  // As soon as the outline arrives, swap in real lesson titles + tags.
+  // This usually beats the animation timeline (timeline ~3.6s, outline ~2-3s).
+  outlinePromise.then(outline => {
+    if (!outline || !outline.lessons) return;
+    state.generatedModule = outline;
+    outline.lessons.forEach((les, i) => {
+      const li = items[i];
+      if (!li) return;
+      const t = li.querySelector('.gen-title');
+      const m = li.querySelector('.gen-meta');
+      const tags = li.querySelector('.gen-tags');
+      if (t) {
+        t.textContent = les.title || `Lecția ${i + 1}`;
+        gsap.fromTo(t, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: .35 });
+      }
+      if (m && les.minutes) m.textContent = `${les.minutes} min`;
+      if (tags && Array.isArray(les.tags) && les.tags.length) {
+        tags.innerHTML = les.tags.slice(0, 4).map(s => `<span>${escapeHtml(String(s))}</span>`).join('');
+      }
+    });
+  });
+
+  // Pass 2 — kick off lesson-1 generation EARLY so by the time the
+  // timeline animation finishes, lesson 1 is ready (or close to it).
+  // Lessons 2..N are prefetched in the background after navigation.
+  const lesson1Promise = outlinePromise.then(outline => {
+    if (!outline || !outline.lessons || !outline.lessons[0]) return null;
+    return api.generateLesson(outline.lessons[0].id).catch(err => {
+      console.warn('lesson 1 generation failed', err);
+      return null;
+    });
+  });
+
   genTl.add(async () => {
     setOrbState('happy');
     streamCtx.stop();
-    const built = await buildPromise;
-    if (built && built.lessons && built.lessons.length) {
-      state.generatedModule = built;
-      state.currentLesson = null;
+    if (factTimer) { clearInterval(factTimer); factTimer = null; }
+
+    const outline = await outlinePromise;
+    const lesson1 = await lesson1Promise;
+    if (outline) {
+      state.generatedModule = outline;
+      state.currentLesson = lesson1 || null;
+      // Prefetch the rest in the background so subsequent lessons are
+      // instant when the user clicks "Pas următor".
+      _prefetchRemainingLessons(outline);
     }
-    // After generation: returning users go straight to lesson;
-    // anonymous users must create an account to save progress.
+    // After generation: logged-in users go straight to lesson; anonymous
+    // users sign up first (we re-generate after signup).
     if (Auth.isLoggedIn()) {
       showView('lesson');
     } else {
       showView('auth-signup');
     }
-  }, '+=0.4');
+  }, '+=0.3');
+}
+
+// Sequentially generate lessons 2..N (skip lesson 1 which is already
+// loaded). Sequential — DeepSeek's free tier is rate-limited and
+// bursting causes 429s. By the time the user is on lesson 2, content
+// is ready (no extra wait).
+async function _prefetchRemainingLessons(outline) {
+  if (!outline || !outline.lessons) return;
+  state.lessonCache = state.lessonCache || {};
+  for (let i = 1; i < outline.lessons.length; i++) {
+    const les = outline.lessons[i];
+    if (!les || !les.id) continue;
+    if (state.lessonCache[les.id]) continue;
+    try {
+      const full = await api.generateLesson(les.id);
+      if (full) state.lessonCache[les.id] = full;
+    } catch (err) {
+      console.warn(`prefetch lesson ${i + 1} failed`, err);
+      // Continue with the others — one failure shouldn't kill the chain.
+    }
+  }
+}
+
+// Render a backend lesson object into the lesson view's DOM so the
+// hardcoded demo content gets replaced by AI-generated content. Called
+// whenever state.currentLesson changes.
+function applyLessonToView(lesson) {
+  if (!lesson) return;
+  const card = $('.view-lesson .lesson-card');
+  if (!card) return;
+
+  const practice = lesson.practice || {};
+  const hook = practice.hook || '';
+  const body = lesson.body || '';
+  const exercises = Array.isArray(practice.exercises) ? practice.exercises : [];
+  const moduleTitle = state.generatedModule?.title || state.topic || '';
+  const lessonIdx = lesson.index || 1;
+
+  // ── ctxbar (Modulul / topic / Lecția N)
+  const ctxL = $('.view-lesson .ctxbar-l');
+  if (ctxL) {
+    ctxL.innerHTML = `
+      <span class="muted">Modulul</span>
+      <span class="dot-sep">·</span>
+      <span>${escapeHtml(moduleTitle)}</span>
+      <span class="dot-sep">·</span>
+      <span>Lecția ${lessonIdx}</span>
+    `;
+  }
+
+  // ── theory pane (title + hook + body paragraphs)
+  const theory = card.querySelector('[data-pane="theory"]');
+  if (theory) {
+    // First word of title gets <em> for the serif italic touch.
+    const title = lesson.title || `Lecția ${lessonIdx}`;
+    const [first, ...rest] = title.split(' ');
+    const titleHtml = rest.length
+      ? `<em>${escapeHtml(first)}</em> ${escapeHtml(rest.join(' '))}`
+      : `<em>${escapeHtml(first)}</em>`;
+
+    const paragraphs = body
+      .split(/\n{2,}/)
+      .map(p => p.trim())
+      .filter(Boolean);
+
+    const parts = [`<h3 class="lesson-title">${titleHtml}</h3>`];
+    if (hook) parts.push(`<p class="lesson-meta"><em>${escapeHtml(hook)}</em></p>`);
+    paragraphs.forEach(p => {
+      // If the paragraph looks like a code block (begins with ``` or has 4-space indent),
+      // wrap it as <pre><code>. Otherwise render as <p class="lesson-body">.
+      const codeMatch = p.match(/^```[\w]*\n?([\s\S]*?)\n?```$/);
+      if (codeMatch) {
+        parts.push(`<pre class="code"><code>${escapeHtml(codeMatch[1])}</code></pre>`);
+      } else {
+        parts.push(`<p class="lesson-body">${escapeHtml(p)}</p>`);
+      }
+    });
+    parts.push(`
+      <div class="lesson-foot">
+        <button class="btn-ghost" id="prevStep">← Pasul anterior</button>
+        <button class="btn btn-primary" id="nextStep">Pas următor →</button>
+      </div>
+    `);
+    theory.innerHTML = parts.join('\n');
+  }
+
+  // ── practice pane (first exercise of type fill/code/choice)
+  const practicePane = card.querySelector('[data-pane="practice"]');
+  if (practicePane) {
+    const ex = exercises[0];
+    if (!ex) {
+      practicePane.innerHTML = '<p class="muted">Niciun exercițiu pentru lecția asta.</p>';
+    } else if (ex.type === 'fill') {
+      practicePane.innerHTML = `
+        <h3 class="lesson-title"><em>Completează</em></h3>
+        <p class="lesson-body">${escapeHtml(ex.prompt || '')}</p>
+        <p>${(ex.blanks || []).map((_, i) =>
+          `<input class="blank-input" data-blank="${i}" type="text" autocomplete="off" placeholder="___" />`
+        ).join(' ')}</p>
+        ${ex.hint ? `<p class="practice-hint"><em>Indiciu:</em> ${escapeHtml(ex.hint)}</p>` : ''}
+      `;
+    } else if (ex.type === 'code') {
+      practicePane.innerHTML = `
+        <h3 class="lesson-title"><em>Scrie</em> codul</h3>
+        <p class="lesson-body">${escapeHtml(ex.prompt || '')}</p>
+        <pre class="code editable"><code><textarea class="code-area" rows="6" spellcheck="false"></textarea></code></pre>
+        ${ex.hint ? `<p class="practice-hint"><em>Indiciu:</em> ${escapeHtml(ex.hint)}</p>` : ''}
+      `;
+    } else if (ex.type === 'choice') {
+      practicePane.innerHTML = `
+        <h3 class="lesson-title"><em>Alege</em> răspunsul</h3>
+        <p class="lesson-body">${escapeHtml(ex.prompt || '')}</p>
+        <div class="choice-grid">${(ex.options || []).map((o, i) =>
+          `<button class="choice-btn" data-i="${i}">${escapeHtml(o)}</button>`
+        ).join('')}</div>
+      `;
+    } else {
+      practicePane.innerHTML = `<p class="muted">Tip exercițiu: ${escapeHtml(ex.type)}</p>`;
+    }
+  }
+
+  // Re-bind nextStep / prevStep handlers because we replaced the DOM nodes.
+  _bindLessonStepButtons();
+
+  // Trigger mini-game lazy-load on next visit to that tab.
+  _miniGameLoaded = false;
+}
+
+function _bindLessonStepButtons() {
+  const nextBtn = $('#nextStep');
+  if (nextBtn) {
+    nextBtn.replaceWith(nextBtn.cloneNode(true));
+    const fresh = $('#nextStep');
+    fresh.addEventListener('click', () => {
+      state.progress = Math.min(100, state.progress + 25);
+      Store.get().lessonProgress = state.progress;
+      Store.save();
+      $('#progressFill').style.width = state.progress + '%';
+      $('#progressPct').textContent = state.progress + '%';
+      gsap.fromTo('.lesson-card', { x: 0 }, { x: -8, duration: .15, yoyo: true, repeat: 1, ease: 'power1.inOut' });
+      if (state.progress >= 100) {
+        celebrate();
+      } else {
+        // Advance to next lesson if available (cached, instant).
+        _advanceToNextLesson();
+        setOrbState('thinking');
+        orbBubble('Hai să mai vedem un pas.');
+      }
+    });
+  }
+  const prevBtn = $('#prevStep');
+  if (prevBtn) {
+    prevBtn.replaceWith(prevBtn.cloneNode(true));
+    const fresh = $('#prevStep');
+    fresh.addEventListener('click', () => {
+      state.progress = Math.max(0, state.progress - 25);
+      Store.get().lessonProgress = state.progress;
+      Store.save();
+      $('#progressFill').style.width = state.progress + '%';
+      $('#progressPct').textContent = state.progress + '%';
+      orbBubble('Bine. Recitim partea aceea.');
+    });
+  }
+}
+
+function _advanceToNextLesson() {
+  const mod = state.generatedModule;
+  if (!mod || !mod.lessons || !state.currentLesson) return;
+  const idx = mod.lessons.findIndex(l => l.id === state.currentLesson.id);
+  if (idx < 0 || idx >= mod.lessons.length - 1) return;
+  const nextStub = mod.lessons[idx + 1];
+  const cached = (state.lessonCache || {})[nextStub.id];
+  if (cached) {
+    state.currentLesson = cached;
+    applyLessonToView(cached);
+  } else {
+    // Not yet prefetched — fire it off and stay on current lesson;
+    // by the time the user clicks again it should be ready.
+    api.generateLesson(nextStub.id).then(full => {
+      if (full) {
+        state.lessonCache = state.lessonCache || {};
+        state.lessonCache[nextStub.id] = full;
+      }
+    });
+  }
 }
 
 function startStreamCanvas(canvas) {

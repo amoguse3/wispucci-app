@@ -24,10 +24,14 @@ class Settings:
     )
     DB_ECHO: bool = DEBUG
 
-    # AI Tutor (OpenAI-compatible API)
+    # AI Tutor (OpenAI-compatible API). Defaults target DeepSeek's
+    # `deepseek-chat` (V3.x) — fastest and cheapest model with reliable
+    # JSON-mode + streaming + Romanian fluency. Override via env vars to
+    # point at any other OpenAI-compatible endpoint (OpenAI, Anthropic
+    # via proxy, Together, Groq, etc.).
     AI_API_KEY: Optional[str] = os.getenv("AI_API_KEY", None)
-    AI_BASE_URL: str = os.getenv("AI_BASE_URL", "https://api.openai.com/v1")
-    AI_MODEL: str = os.getenv("AI_MODEL", "gpt-4o-mini")
+    AI_BASE_URL: str = os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1")
+    AI_MODEL: str = os.getenv("AI_MODEL", "deepseek-chat")
     AI_TUTOR_TEMPERATURE: float = 0.7
     AI_TUTOR_MAX_TOKENS: int = 512
 

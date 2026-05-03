@@ -29,8 +29,10 @@ from backend.schemas import (
 from backend.tutor_skills import (
     check_answer as skill_check_answer,
     generate_course,
+    generate_course_outline,
     generate_exercises,
     generate_explanation,
+    generate_lesson_content,
     generate_mini_test,
     generate_minigame,
     stream_explanation,
@@ -233,6 +235,190 @@ async def build_lesson(
         "title": module.title,
         "level": module.level,
         "lessons": lessons_out,
+    }
+
+
+# ─── POST /api/tutor/course/outline ──────────────────────
+# Two-pass generation: STEP 1 — outline only.
+# Generates module title + lesson titles + tags. Cheap (~250 out tokens,
+# ~2-3s wall clock). Returns DB-backed lesson IDs the frontend can
+# reference for the per-lesson generation step.
+
+
+@router.post("/course/outline")
+async def build_course_outline(
+    body: TutorBuildLessonRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Fast first pass: returns module + empty lesson stubs (titles only)."""
+    _check_rate_limit(user.id)
+
+    user_tone = "cald"
+    try:
+        if isinstance(user.settings, dict):
+            user_tone = str(user.settings.get("tone") or "cald")
+    except Exception:
+        user_tone = "cald"
+
+    outline = await generate_course_outline(
+        subject=body.subject,
+        topic=body.topic,
+        level=body.level,
+        lesson_count=4,
+        tone=user_tone,
+    )
+
+    from sqlalchemy import func as sqlfunc
+    r = await db.execute(
+        select(sqlfunc.max(Module.index)).where(
+            Module.subject == body.subject,
+            Module.topic == body.topic,
+            Module.level == body.level,
+        )
+    )
+    max_idx = r.scalar() or 0
+    next_idx = max_idx + 1
+
+    module = Module(
+        subject=body.subject,
+        topic=body.topic,
+        level=body.level,
+        index=next_idx,
+        title=outline.get("title", body.topic),
+        summary=outline.get("title", "")[:256],
+        estimated_minutes=body.level * 5 + 10,
+    )
+    db.add(module)
+    await db.flush()
+
+    lesson_stubs = []
+    for i, les in enumerate(outline.get("lessons", [])):
+        lesson = Lesson(
+            module_id=module.id,
+            index=i + 1,
+            title=les.get("title", f"Lecția {i + 1}"),
+            body=None,
+            practice={
+                "type": "outline",
+                "subject": les.get("subject", ""),
+                "tags": les.get("tags", []),
+                "minutes": les.get("minutes", 5),
+            },
+        )
+        db.add(lesson)
+        await db.flush()
+        lesson_stubs.append({
+            "id": lesson.id,
+            "index": lesson.index,
+            "title": lesson.title,
+            "subject": les.get("subject", ""),
+            "tags": les.get("tags", []),
+            "minutes": les.get("minutes", 5),
+            "ready": False,
+        })
+
+    await db.flush()
+
+    return {
+        "module_id": module.id,
+        "title": module.title,
+        "level": module.level,
+        "subject": body.subject,
+        "topic": body.topic,
+        "lessons": lesson_stubs,
+    }
+
+
+# ─── POST /api/tutor/lesson/{lesson_id}/generate ─────────
+# Two-pass generation: STEP 2 — fill in body + exercises + mini_game
+# for ONE specific lesson. Idempotent: if the lesson already has a body
+# the cached version is returned without burning more tokens.
+
+
+@router.post("/lesson/{lesson_id}/generate")
+async def generate_lesson(
+    lesson_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Fill in a previously-stubbed lesson with full content."""
+    lesson = (
+        await db.execute(select(Lesson).where(Lesson.id == lesson_id))
+    ).scalar_one_or_none()
+    if not lesson:
+        raise HTTPException(404, "Lesson not found")
+
+    # Already generated → return cached.
+    if lesson.body and (lesson.practice or {}).get("type") != "outline":
+        return {
+            "id": lesson.id,
+            "index": lesson.index,
+            "title": lesson.title,
+            "body": lesson.body,
+            "practice": lesson.practice,
+            "cached": True,
+        }
+
+    _check_rate_limit(user.id)
+
+    module = (
+        await db.execute(select(Module).where(Module.id == lesson.module_id))
+    ).scalar_one_or_none()
+    if not module:
+        raise HTTPException(404, "Module not found")
+
+    # Find total lessons in module so we can tell the model
+    # 'lesson 2 of 4' and get appropriate scaffolding.
+    total_rows = await db.execute(select(Lesson).where(Lesson.module_id == module.id))
+    total_lessons = len(total_rows.scalars().all()) or 1
+
+    user_tone = "cald"
+    try:
+        if isinstance(user.settings, dict):
+            user_tone = str(user.settings.get("tone") or "cald")
+    except Exception:
+        user_tone = "cald"
+
+    outline_subject = ""
+    outline_practice = lesson.practice or {}
+    if isinstance(outline_practice, dict):
+        outline_subject = str(outline_practice.get("subject") or "")
+
+    # Mini-games on lesson 1 and last lesson — peak-end + first-impression.
+    include_game = lesson.index in (1, total_lessons)
+
+    content = await generate_lesson_content(
+        subject=module.subject,
+        topic=module.topic,
+        level=module.level,
+        lesson_title=lesson.title,
+        lesson_subject=outline_subject or lesson.title,
+        position=lesson.index,
+        total=total_lessons,
+        tone=user_tone,
+        include_mini_game=include_game,
+    )
+
+    lesson.body = content.get("body", "")
+    lesson.practice = {
+        "type": "mixed",
+        "hook": content.get("hook", ""),
+        "key_terms": content.get("key_terms", []),
+        "exercises": content.get("exercises", []),
+        "mini_game": content.get("mini_game"),
+        "subject": outline_subject,
+    }
+    db.add(lesson)
+    await db.flush()
+
+    return {
+        "id": lesson.id,
+        "index": lesson.index,
+        "title": lesson.title,
+        "body": lesson.body,
+        "practice": lesson.practice,
+        "cached": False,
     }
 
 
