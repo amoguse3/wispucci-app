@@ -7,6 +7,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+# Load .env from project root if present. python-dotenv is already a
+# direct dependency. We do this BEFORE the dataclass is defined so the
+# os.getenv defaults pick up file-based values.
+try:
+    from dotenv import load_dotenv
+    _root = Path(__file__).resolve().parent.parent
+    for _candidate in ("backend/.env", ".env", "backend/.env.local", ".env.local"):
+        _p = _root / _candidate
+        if _p.exists():
+            load_dotenv(_p, override=False)
+except Exception:
+    pass
+
 
 @dataclass
 class Settings:

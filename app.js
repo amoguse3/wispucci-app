@@ -8,16 +8,36 @@ const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
 // =========================================================
 // API CLIENT (talks to FastAPI backend)
 // =========================================================
-const API_BASE = (() => {
-  // Talk to the backend on the same host. In local dev we serve the
-  // frontend on :8000 (python -m http.server) and the backend on :8801.
+// Backend resolution. In production (devinapps.com static host) we point
+// at the deployed wispucci-backend on fly.io. Override via window.WISPUCCI_API_BASE
+// for tunneled / staging backends. URLs may include "user:pass@host" for
+// HTTP basic auth tunnels — apiFetch strips the creds and sends them as
+// Authorization: Basic instead (Chrome blocks credentials in fetch URLs).
+const _API_RESOLVED = (() => {
   const explicit = window.WISPUCCI_API_BASE;
-  if (explicit) return explicit;
-  if (location.port && location.port !== '8801') {
-    return `${location.protocol}//${location.hostname}:8801`;
+  if (explicit) {
+    try {
+      const u = new URL(explicit);
+      const userinfo = u.username ? `${decodeURIComponent(u.username)}:${decodeURIComponent(u.password)}` : '';
+      const clean = `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '')}`;
+      return { base: clean, basic: userinfo ? btoa(userinfo) : '' };
+    } catch (_) {
+      return { base: explicit, basic: '' };
+    }
   }
-  return location.origin;
+  // Local dev: frontend on :8000/python http.server, backend on :8801/uvicorn.
+  if (location.port && location.port !== '8801') {
+    return { base: `${location.protocol}//${location.hostname}:8801`, basic: '' };
+  }
+  // Static prod: devinapps.com hosts only static files, so fall back to
+  // the fly backend.
+  if (location.hostname.endsWith('.devinapps.com')) {
+    return { base: 'https://wispucci-backend-ezpeqmlb.fly.dev', basic: '' };
+  }
+  return { base: location.origin, basic: '' };
 })();
+const API_BASE = _API_RESOLVED.base;
+const _API_BASIC = _API_RESOLVED.basic;
 
 const Auth = {
   TOKEN_KEY: 'wispucci.token',
@@ -44,6 +64,9 @@ async function apiFetch(path, opts = {}) {
     { 'Content-Type': 'application/json' },
     opts.headers || {},
   );
+  // Basic auth (for tunnel URLs) goes as X-Tunnel-Auth so it doesn't
+  // collide with the bearer token. The CDN will strip it.
+  if (_API_BASIC) headers['X-Tunnel-Auth'] = _API_BASIC;
   if (Auth.token) headers['Authorization'] = `Bearer ${Auth.token}`;
   let resp;
   try {
@@ -701,22 +724,43 @@ async function runGeneration() {
     streamCtx.stop();
     if (factTimer) { clearInterval(factTimer); factTimer = null; }
 
+    // Wait for outline (~5s usually). Don't wait for lesson 1 — we
+    // navigate to the lesson view with a skeleton + apply real content
+    // when lesson 1 promise resolves. Perceived load drops from ~17s
+    // to ~5s.
     const outline = await outlinePromise;
-    const lesson1 = await lesson1Promise;
     if (outline) {
       state.generatedModule = outline;
-      state.currentLesson = lesson1 || null;
-      // Prefetch the rest in the background so subsequent lessons are
-      // instant when the user clicks "Pas următor".
-      _prefetchRemainingLessons(outline);
+      // Build a skeleton lesson stub from the outline so the lesson
+      // view shows the lesson title + a "Wispucci scrie..." placeholder
+      // before the body actually arrives.
+      const stub = outline.lessons && outline.lessons[0];
+      if (stub) {
+        state.currentLesson = {
+          id: stub.id,
+          index: stub.index || 1,
+          title: stub.title,
+          body: '',
+          practice: { hook: '', exercises: [], _loading: true },
+        };
+      }
     }
-    // After generation: logged-in users go straight to lesson; anonymous
-    // users sign up first (we re-generate after signup).
-    if (Auth.isLoggedIn()) {
-      showView('lesson');
-    } else {
+    // Anonymous users still sign up first.
+    if (!Auth.isLoggedIn()) {
       showView('auth-signup');
+      return;
     }
+    showView('lesson');
+
+    // Now stream the lesson 1 body in once it arrives, then start
+    // prefetching the rest in the background.
+    lesson1Promise.then(lesson1 => {
+      if (lesson1 && state.generatedModule) {
+        state.currentLesson = lesson1;
+        applyLessonToView(lesson1);
+      }
+      if (state.generatedModule) _prefetchRemainingLessons(state.generatedModule);
+    });
   }, '+=0.3');
 }
 
@@ -784,21 +828,31 @@ function applyLessonToView(lesson) {
       .filter(Boolean);
 
     const parts = [`<h3 class="lesson-title">${titleHtml}</h3>`];
-    if (hook) parts.push(`<p class="lesson-meta"><em>${escapeHtml(hook)}</em></p>`);
-    paragraphs.forEach(p => {
-      // If the paragraph looks like a code block (begins with ``` or has 4-space indent),
-      // wrap it as <pre><code>. Otherwise render as <p class="lesson-body">.
-      const codeMatch = p.match(/^```[\w]*\n?([\s\S]*?)\n?```$/);
-      if (codeMatch) {
-        parts.push(`<pre class="code"><code>${escapeHtml(codeMatch[1])}</code></pre>`);
-      } else {
-        parts.push(`<p class="lesson-body">${escapeHtml(p)}</p>`);
-      }
-    });
+    if (practice._loading) {
+      // Skeleton while DeepSeek finishes generating the body.
+      parts.push(`
+        <p class="lesson-meta"><em>Wispucci scrie lecția pentru tine…</em></p>
+        <div class="skeleton-line" style="width:96%"></div>
+        <div class="skeleton-line" style="width:88%"></div>
+        <div class="skeleton-line" style="width:74%"></div>
+        <div class="skeleton-line" style="width:90%"></div>
+        <div class="skeleton-line" style="width:62%"></div>
+      `);
+    } else {
+      if (hook) parts.push(`<p class="lesson-meta"><em>${escapeHtml(hook)}</em></p>`);
+      paragraphs.forEach(p => {
+        const codeMatch = p.match(/^```[\w]*\n?([\s\S]*?)\n?```$/);
+        if (codeMatch) {
+          parts.push(`<pre class="code"><code>${escapeHtml(codeMatch[1])}</code></pre>`);
+        } else {
+          parts.push(`<p class="lesson-body">${escapeHtml(p)}</p>`);
+        }
+      });
+    }
     parts.push(`
       <div class="lesson-foot">
-        <button class="btn-ghost" id="prevStep">← Pasul anterior</button>
-        <button class="btn btn-primary" id="nextStep">Pas următor →</button>
+        <button class="btn-ghost" id="prevStep" ${practice._loading ? 'disabled' : ''}>← Pasul anterior</button>
+        <button class="btn btn-primary" id="nextStep" ${practice._loading ? 'disabled' : ''}>Pas următor →</button>
       </div>
     `);
     theory.innerHTML = parts.join('\n');
@@ -807,6 +861,14 @@ function applyLessonToView(lesson) {
   // ── practice pane (first exercise of type fill/code/choice)
   const practicePane = card.querySelector('[data-pane="practice"]');
   if (practicePane) {
+    if (practice._loading) {
+      practicePane.innerHTML = `
+        <h3 class="lesson-title"><em>Exercițiu</em></h3>
+        <p class="lesson-meta"><em>Wispucci pregătește un exercițiu…</em></p>
+        <div class="skeleton-line" style="width:84%"></div>
+        <div class="skeleton-line" style="width:60%"></div>
+      `;
+    } else {
     const ex = exercises[0];
     if (!ex) {
       practicePane.innerHTML = '<p class="muted">Niciun exercițiu pentru lecția asta.</p>';
@@ -837,6 +899,7 @@ function applyLessonToView(lesson) {
     } else {
       practicePane.innerHTML = `<p class="muted">Tip exercițiu: ${escapeHtml(ex.type)}</p>`;
     }
+    } // closes else of practice._loading
   }
 
   // Re-bind nextStep / prevStep handlers because we replaced the DOM nodes.
