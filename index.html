@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./style.css?v=27" />
+<link rel="stylesheet" href="./style.css?v=28" />
 </head>
 <body>
 
@@ -124,6 +124,9 @@
       <div class="topnav-right">
         <span class="streak">🔥 <span data-streak>0</span></span>
         <div class="avatar" data-avatar>?</div>
+        <button class="topnav-hamburger" data-mobile-menu-open type="button" aria-label="meniu" aria-controls="mobileDrawer" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
       </div>
     </nav>
 
@@ -198,10 +201,10 @@
           <p class="muted home-section-sub">șapte tap-uri și știi unde ești.</p>
         </header>
         <div class="home-tiles">
-          <button class="home-tile tile-primary" data-go="lesson">
+          <button class="home-tile tile-primary" data-go="lesson" data-home-tile-continue>
             <span class="tile-icon">▶</span>
-            <span class="tile-title">Continuă lecția</span>
-            <span class="tile-sub">Modulul 2 · Funcții</span>
+            <span class="tile-title" data-home-tile-continue-title>Continuă lecția</span>
+            <span class="tile-sub" data-home-tile-continue-sub>alege subiect &amp; nivel</span>
             <span class="tile-go">→</span>
           </button>
           <button class="home-tile" data-go="onboarding-1">
@@ -293,10 +296,11 @@
       <div class="topic-grid" id="topicGrid">
         <!-- dynamic topic cards -->
       </div>
-      <div class="topic-custom">
+      <form class="topic-custom" id="customTopicForm" autocomplete="off">
         <span class="muted">sau</span>
-        <input class="topic-input" placeholder="scrie ce vrei tu — ex. „ințeleg promise-uri în JS”" />
-      </div>
+        <input class="topic-input" id="customTopicInput" name="topic" placeholder="scrie ce vrei tu — ex. „ințeleg promise-uri în JS”" maxlength="120" />
+        <button class="btn-ghost topic-input-go" type="submit" aria-label="începe">→</button>
+      </form>
     </div>
   </section>
 
@@ -439,6 +443,9 @@
       <div class="topnav-right">
         <span class="streak">🔥 <span data-streak>0</span></span>
         <div class="avatar" data-avatar>?</div>
+        <button class="topnav-hamburger" data-mobile-menu-open type="button" aria-label="meniu" aria-controls="mobileDrawer" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
       </div>
     </nav>
 
@@ -575,6 +582,9 @@
       <div class="topnav-right">
         <span class="streak">🔥 <span data-streak>0</span></span>
         <div class="avatar" data-avatar>?</div>
+        <button class="topnav-hamburger" data-mobile-menu-open type="button" aria-label="meniu" aria-controls="mobileDrawer" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
       </div>
     </nav>
 
@@ -678,6 +688,9 @@
       <div class="topnav-right">
         <span class="streak">🔥 <span data-streak>0</span></span>
         <div class="avatar" data-avatar>?</div>
+        <button class="topnav-hamburger" data-mobile-menu-open type="button" aria-label="meniu" aria-controls="mobileDrawer" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
       </div>
     </nav>
 
@@ -745,19 +758,19 @@
           </header>
           <div class="setting-row simple">
             <span class="setting-label">email</span>
-            <span class="setting-value">maxim@example.com</span>
+            <span class="setting-value" data-account-email>—</span>
           </div>
           <div class="setting-row simple">
             <span class="setting-label">limba</span>
-            <span class="setting-value">Română</span>
+            <span class="setting-value" data-account-language>Română</span>
           </div>
           <div class="setting-row simple">
             <span class="setting-label">streak</span>
-            <span class="setting-value"><span data-streak>3</span> zile · cea mai lungă 12</span>
+            <span class="setting-value"><span data-streak>0</span> zile · cea mai lungă <span data-account-streak-longest>0</span></span>
           </div>
           <div class="setting-row simple">
             <span class="setting-label">XP total</span>
-            <span class="setting-value" data-xp-total>1248</span>
+            <span class="setting-value" data-account-xp-total>0</span>
           </div>
         </section>
 
@@ -775,9 +788,40 @@
   <!-- ============== Toast container ============== -->
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
+  <!-- Mobile drawer (≤ 900px). Toggled by .topnav-hamburger. -->
+  <div class="mobile-drawer" id="mobileDrawer" data-mobile-drawer hidden aria-hidden="true">
+    <button class="mobile-drawer-scrim" data-mobile-menu-close type="button" aria-label="închide meniul"></button>
+    <aside class="mobile-drawer-panel" role="dialog" aria-label="meniu">
+      <header class="mobile-drawer-head">
+        <span class="mobile-drawer-title">Meniu</span>
+        <button class="mobile-drawer-close" data-mobile-menu-close type="button" aria-label="închide">✕</button>
+      </header>
+      <ul class="mobile-drawer-links">
+        <li><a href="#" data-go="home" data-mobile-menu-link>Acasă</a></li>
+        <li><a href="#" data-go="lesson" data-mobile-menu-link>Lecții</a></li>
+        <li><a href="#" data-go="stats" data-mobile-menu-link>Statistica</a></li>
+        <li><a href="#" data-go="settings" data-mobile-menu-link>Settings</a></li>
+      </ul>
+      <button class="btn-ghost mobile-drawer-secondary" data-go="onboarding-1" data-mobile-menu-link>+ Lecție nouă</button>
+    </aside>
+  </div>
 
+
+<script>
+  // Dev escape hatch: when running the static frontend locally and you don't
+  // want to spin up the local backend, append `?api=prod` to use the
+  // production fly.io API. Stored in sessionStorage so reloads keep it.
+  (function () {
+    var qp = new URLSearchParams(location.search).get('api');
+    if (qp === 'prod') sessionStorage.setItem('wispucci.api', 'prod');
+    if (qp === 'local') sessionStorage.removeItem('wispucci.api');
+    if (sessionStorage.getItem('wispucci.api') === 'prod') {
+      window.WISPUCCI_API_BASE = 'https://wispucci-backend-ezpeqmlb.fly.dev';
+    }
+  })();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/Flip.min.js"></script>
-<script src="./app.js?v=27"></script>
+<script src="./app.js?v=28"></script>
 </body>
 </html>

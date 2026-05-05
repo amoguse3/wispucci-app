@@ -422,7 +422,15 @@ function showView(name) {
       });
       grid.appendChild(b);
     });
+    // Reset the custom topic input each time we land here (avoids leaking
+    // value from a previous session).
+    const customInput = $('#customTopicInput');
+    if (customInput) customInput.value = '';
   }
+
+  // Close the mobile drawer on every navigation so it doesn't linger after
+  // the user picks a destination.
+  closeMobileDrawer();
 
   // Hide orb for views without an orb host (stats, settings, onboarding-* use mini host)
   const hasOrb = VIEWS_WITH_ORB.has(name) || name.startsWith('onboarding-');
@@ -497,6 +505,77 @@ $$('.level').forEach(el => {
     el.classList.add('is-on');
     state.level = +el.dataset.level;
   });
+});
+
+// =========================================================
+// CUSTOM TOPIC INPUT (onboarding-2): Enter or "→" submits.
+// Previously this input had no handler at all — typing did nothing.
+// =========================================================
+function _submitCustomTopic() {
+  const input = $('#customTopicInput');
+  if (!input) return;
+  const v = (input.value || '').trim();
+  if (v.length < 2) {
+    input.focus();
+    showToast('scrie ce vrei să înveți', '!');
+    return;
+  }
+  state.topic = v;
+  showView('onboarding-3');
+}
+$('#customTopicForm')?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  _submitCustomTopic();
+});
+
+// =========================================================
+// MOBILE DRAWER (≤900px). Opened by .topnav-hamburger, closed by:
+//  - clicking the scrim
+//  - clicking the close button
+//  - clicking any nav link (handled in showView via closeMobileDrawer())
+//  - pressing Escape
+// =========================================================
+function openMobileDrawer() {
+  const d = $('#mobileDrawer');
+  if (!d) return;
+  d.removeAttribute('hidden');
+  d.setAttribute('aria-hidden', 'false');
+  // Force reflow before adding the open class so the slide-in animation runs.
+  // eslint-disable-next-line no-unused-expressions
+  d.offsetHeight;
+  d.classList.add('is-open');
+  $$('[data-mobile-menu-open]').forEach(b => b.setAttribute('aria-expanded', 'true'));
+  document.body.classList.add('is-drawer-open');
+}
+function closeMobileDrawer() {
+  const d = $('#mobileDrawer');
+  if (!d || !d.classList.contains('is-open')) return;
+  d.classList.remove('is-open');
+  d.setAttribute('aria-hidden', 'true');
+  d.setAttribute('hidden', '');
+  $$('[data-mobile-menu-open]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  document.body.classList.remove('is-drawer-open');
+}
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-mobile-menu-open]')) {
+    e.preventDefault();
+    openMobileDrawer();
+    return;
+  }
+  if (e.target.closest('[data-mobile-menu-close]')) {
+    e.preventDefault();
+    closeMobileDrawer();
+    return;
+  }
+  // Drawer links use the global [data-go] handler too — closing happens in
+  // showView. But also close immediately so the user sees feedback even if
+  // the target view is unchanged.
+  if (e.target.closest('[data-mobile-menu-link]')) {
+    closeMobileDrawer();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeMobileDrawer();
 });
 
 // =========================================================
@@ -1414,7 +1493,51 @@ const sampleGames = {
     options: ['2', '4', '6', 'eroare'],
     answer: 1,
   },
+  word_match: {
+    type: 'word_match',
+    prompt: 'Potrivește cuvântul cu traducerea lui.',
+    pairs: [
+      ['Bună dimineața', 'Good morning'],
+      ['Mulțumesc',      'Thank you'],
+      ['La revedere',    'Goodbye'],
+      ['Te rog',         'Please'],
+    ],
+  },
 };
+
+// Validate that a minigame payload has the fields its renderer needs. AI
+// occasionally returns the right `type` with empty/malformed data which
+// would crash the renderer. Returns true if usable.
+function _isMiniGameUsable(g) {
+  if (!g || typeof g !== 'object' || !g.type) return false;
+  switch (g.type) {
+    case 'bug_hunter':
+      return Array.isArray(g.lines) && g.lines.length > 0
+        && Number.isInteger(g.buggy_index)
+        && g.buggy_index >= 0 && g.buggy_index < g.lines.length;
+    case 'code_assemble': {
+      if (!Array.isArray(g.blocks) || g.blocks.length < 2) return false;
+      if (!Array.isArray(g.correct_order)) return false;
+      if (g.correct_order.length !== g.blocks.length) return false;
+      const seen = new Set();
+      for (const i of g.correct_order) {
+        if (!Number.isInteger(i) || i < 0 || i >= g.blocks.length) return false;
+        if (seen.has(i)) return false;
+        seen.add(i);
+      }
+      return true;
+    }
+    case 'output_predict':
+      return Array.isArray(g.options) && g.options.length >= 2
+        && Number.isInteger(g.answer)
+        && g.answer >= 0 && g.answer < g.options.length;
+    case 'word_match':
+      return Array.isArray(g.pairs) && g.pairs.length >= 2
+        && g.pairs.every(p => Array.isArray(p) && p.length === 2 && p[0] && p[1]);
+    default:
+      return false;
+  }
+}
 
 let _miniGameLoaded = false;
 async function ensureMiniGameLoaded(force = false) {
@@ -1428,9 +1551,17 @@ async function ensureMiniGameLoaded(force = false) {
       game = await api.miniGame(state.currentLesson.id, 'auto');
     } catch (_) { /* fallthrough */ }
   }
-  if (!game || !game.type) {
-    const keys = Object.keys(sampleGames);
-    game = sampleGames[keys[Math.floor(Math.random() * keys.length)]];
+  if (!_isMiniGameUsable(game)) {
+    // Prefer a sample of the same type when possible (so the UI feel is
+    // consistent), otherwise pick any sample.
+    const wanted = game && game.type;
+    const sameType = wanted && Object.values(sampleGames).find(s => s.type === wanted);
+    if (sameType) {
+      game = sameType;
+    } else {
+      const keys = Object.keys(sampleGames);
+      game = sampleGames[keys[Math.floor(Math.random() * keys.length)]];
+    }
   }
   renderMiniGame(host, game);
 }
@@ -1579,11 +1710,15 @@ function renderWordMatch(host, game) {
       <span class="mg-tag">🔁 word match</span>
       <span class="mg-prompt">${escapeHtml(game.prompt || 'Potrivește perechile.')}</span>
     </div>
-    <div class="mg-pairs"></div>
+    <div class="mg-pairs is-cols">
+      <div class="mg-col mg-col-left" data-col="L"></div>
+      <div class="mg-col mg-col-right" data-col="R"></div>
+    </div>
     <p class="mg-feedback muted small" id="matchFb"></p>
   `;
   host.appendChild(wrap);
-  const pairsHost = wrap.querySelector('.mg-pairs');
+  const leftCol = wrap.querySelector('.mg-col-left');
+  const rightCol = wrap.querySelector('.mg-col-right');
   const left = game.pairs.map(p => p[0]);
   const right = game.pairs.map(p => p[1]).slice();
   shuffleInPlace(right);
@@ -1595,11 +1730,11 @@ function renderWordMatch(host, game) {
     lBtn.dataset.side = 'L';
     lBtn.dataset.i = i;
     lBtn.addEventListener('click', () => {
-      $$('.mg-match-cell[data-side="L"]', pairsHost).forEach(x => x.classList.remove('is-on'));
+      $$('.mg-match-cell[data-side="L"]', wrap).forEach(x => x.classList.remove('is-on'));
       lBtn.classList.add('is-on');
       chosenLeft = i;
     });
-    pairsHost.appendChild(lBtn);
+    leftCol.appendChild(lBtn);
   });
   right.forEach((r) => {
     const rBtn = document.createElement('button');
@@ -1612,7 +1747,7 @@ function renderWordMatch(host, game) {
       const fb = wrap.querySelector('#matchFb');
       if (rBtn.textContent === expected) {
         rBtn.classList.add('is-correct');
-        $$('.mg-match-cell.is-on[data-side="L"]', pairsHost).forEach(x => {
+        $$('.mg-match-cell.is-on[data-side="L"]', wrap).forEach(x => {
           x.classList.add('is-correct');
           x.disabled = true;
         });
@@ -1625,7 +1760,7 @@ function renderWordMatch(host, game) {
         fb.textContent = 'Nu, mai încearcă.';
       }
     });
-    pairsHost.appendChild(rBtn);
+    rightCol.appendChild(rBtn);
   });
 }
 
@@ -1918,16 +2053,25 @@ async function renderStats() {
   // Heatmap
   const hm = $('#heatmap');
   hm.innerHTML = '';
-  const xps = stats.heatmap.map(d => d.xp);
-  const maxXp = Math.max(40, ...xps);
-  stats.heatmap.forEach(d => {
-    const cell = document.createElement('div');
-    cell.className = 'heat-cell';
-    const intensity = d.xp <= 0 ? 0 : Math.min(1, d.xp / maxXp);
-    cell.style.setProperty('--heat', intensity.toFixed(2));
-    cell.title = `${d.day} · ${d.xp} XP`;
-    hm.appendChild(cell);
-  });
+  const heat = Array.isArray(stats.heatmap) ? stats.heatmap : [];
+  const hasHeat = heat.some(d => (d && d.xp > 0));
+  if (!heat.length || !hasHeat) {
+    const empty = document.createElement('div');
+    empty.className = 'heatmap-empty';
+    empty.textContent = 'antrenează-te azi · primul pătrat apare aici';
+    hm.appendChild(empty);
+  } else {
+    const xps = heat.map(d => d.xp);
+    const maxXp = Math.max(40, ...xps);
+    heat.forEach(d => {
+      const cell = document.createElement('div');
+      cell.className = 'heat-cell';
+      const intensity = d.xp <= 0 ? 0 : Math.min(1, d.xp / maxXp);
+      cell.style.setProperty('--heat', intensity.toFixed(2));
+      cell.title = `${d.day} · ${d.xp} XP`;
+      hm.appendChild(cell);
+    });
+  }
 
   // Subject breakdown
   const sb = $('#subjectBreakdown');
@@ -2062,6 +2206,12 @@ async function refreshHome() {
   const recentSection = $('[data-home-recent-section]');
   const recentList = $('[data-home-recent-list]');
 
+  // Tile in .home-tiles is also bound here so it stops showing the
+  // hardcoded "Modulul 2 · Funcții" placeholder.
+  const tile = $('[data-home-tile-continue]');
+  const tileTitle = $('[data-home-tile-continue-title]');
+  const tileSub = $('[data-home-tile-continue-sub]');
+
   const mod = state.generatedModule;
   if (mod && mod.lessons && mod.lessons.length && state.currentLesson) {
     const idx = mod.lessons.findIndex(l => l.id === state.currentLesson.id);
@@ -2072,6 +2222,12 @@ async function refreshHome() {
     if (lead) {
       lead.innerHTML = `Ai rămas la <em>${escapeHtml(state.currentLesson.title || 'lecția curentă')}</em>. Mai ai <b>${Math.max(0, total - idx - 1)}</b> ${total - idx - 1 === 1 ? 'lecție' : 'lecții'} până la finalul modulului.`;
     }
+    if (tile) {
+      tile.dataset.go = 'lesson';
+      tile.removeAttribute('aria-disabled');
+    }
+    if (tileTitle) tileTitle.textContent = 'Continuă lecția';
+    if (tileSub) tileSub.textContent = `${mod.title || 'modulul curent'} · L${idx >= 0 ? idx + 1 : 1}`;
     const meta = $('[data-home-continue-meta]');
     const title = $('[data-home-continue-title]');
     const fill = $('[data-home-continue-fill]');
@@ -2126,6 +2282,11 @@ async function refreshHome() {
     if (lead) lead.innerHTML = 'Generează primul tău curs ca să începem. Wispucci scrie totul pe loc, în câteva secunde.';
     if (recentSection) recentSection.setAttribute('hidden', '');
     if (recentList) recentList.innerHTML = '';
+    // Without a module the "Continuă" tile would be a dead-end, so retarget
+    // it to onboarding-1 ("new course") and update copy accordingly.
+    if (tile) tile.dataset.go = 'onboarding-1';
+    if (tileTitle) tileTitle.textContent = 'Lecție nouă';
+    if (tileSub) tileSub.textContent = 'alege subiect & nivel';
   }
 
   // Stats from API.
@@ -2139,6 +2300,7 @@ async function refreshHome() {
   $$('[data-streak]').forEach(el => el.textContent = stats.streak.current);
   $$('[data-stat-streak-num]').forEach(el => el.textContent = stats.streak.current);
   $$('[data-stat-streak-longest]').forEach(el => el.textContent = stats.streak.longest);
+  $$('[data-account-streak-longest]').forEach(el => el.textContent = stats.streak.longest);
   $$('[data-stat-week-xp]').forEach(el => el.textContent = stats.xp.week);
   $$('[data-stat-today-xp]').forEach(el => el.textContent = stats.xp.today);
   $$('[data-stat-lessons-done]').forEach(el => el.textContent = lessonsDone);
@@ -2146,6 +2308,7 @@ async function refreshHome() {
   $$('[data-stat-modules]').forEach(el => el.textContent = subjects.length);
   $$('[data-mastered-total]').forEach(el => el.textContent = stats.mastered.total);
   $$('[data-mastered-new]').forEach(el => el.textContent = stats.mastered.new_today);
+  $$('[data-account-xp-total]').forEach(el => el.textContent = (stats.xp && stats.xp.total != null) ? stats.xp.total : (Auth.user && Auth.user.xp_total) || 0);
   $$('[data-celebrate-xp]').forEach(el => el.innerHTML = `+${stats.xp.today || 0} XP <span class="muted">· streak <span data-celebrate-streak>${stats.streak.current}</span> zile</span>`);
 }
 
@@ -2226,6 +2389,27 @@ function initSettingsView() {
       showToast('ai ieșit din cont', '✓');
       showView('welcome');
     });
+  }
+
+  // Account info row was hardcoded in HTML (`maxim@example.com`, XP=1248,
+  // streak=12). Bind it to real values now.
+  const u = Auth.user || {};
+  $$('[data-account-email]').forEach(el => el.textContent = u.email || '—');
+  const cachedStats = state.statsCache;
+  if (cachedStats) {
+    $$('[data-account-streak-longest]').forEach(el => el.textContent = cachedStats.streak.longest);
+    const xpTotal = (cachedStats.xp && cachedStats.xp.total != null) ? cachedStats.xp.total : (u.xp_total || 0);
+    $$('[data-account-xp-total]').forEach(el => el.textContent = xpTotal);
+  }
+  // Even without a fresh stats fetch, ask once so settings can hydrate.
+  if (!cachedStats && Auth.isLoggedIn()) {
+    api.stats().then(stats => {
+      state.statsCache = stats;
+      $$('[data-streak]').forEach(el => el.textContent = stats.streak.current);
+      $$('[data-account-streak-longest]').forEach(el => el.textContent = stats.streak.longest);
+      const xpTotal = (stats.xp && stats.xp.total != null) ? stats.xp.total : (u.xp_total || 0);
+      $$('[data-account-xp-total]').forEach(el => el.textContent = xpTotal);
+    }).catch(() => { /* keep dashes */ });
   }
 }
 
