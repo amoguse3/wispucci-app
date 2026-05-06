@@ -35,6 +35,7 @@ from backend.tutor_skills import (
     generate_lesson_content,
     generate_mini_test,
     generate_minigame,
+    score_lesson_quality,
     stream_explanation,
 )
 
@@ -215,6 +216,8 @@ async def build_lesson(
                 "key_terms": key_terms,
                 "exercises": exercises_raw,
                 "mini_game": mini_game,
+                "final_check": les_data.get("final_check"),
+                "quality": les_data.get("quality", {}),
             },
         )
         db.add(lesson)
@@ -286,7 +289,7 @@ async def build_course_outline(
         level=body.level,
         index=next_idx,
         title=outline.get("title", body.topic),
-        summary=outline.get("title", "")[:256],
+        summary=(outline.get("outcome") or outline.get("title", ""))[:256],
         estimated_minutes=body.level * 5 + 10,
     )
     db.add(module)
@@ -304,6 +307,7 @@ async def build_course_outline(
                 "subject": les.get("subject", ""),
                 "tags": les.get("tags", []),
                 "minutes": les.get("minutes", 5),
+                "outcome": outline.get("outcome", ""),
             },
         )
         db.add(lesson)
@@ -407,6 +411,8 @@ async def generate_lesson(
         "key_terms": content.get("key_terms", []),
         "exercises": content.get("exercises", []),
         "mini_game": content.get("mini_game"),
+        "final_check": content.get("final_check"),
+        "quality": content.get("quality", {}),
         "subject": outline_subject,
     }
     db.add(lesson)
@@ -419,6 +425,70 @@ async def generate_lesson(
         "body": lesson.body,
         "practice": lesson.practice,
         "cached": False,
+    }
+
+
+@router.get("/module/{module_id}/quality")
+async def module_quality(
+    module_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Return deterministic quality scores for generated lessons in a module."""
+    module_row = (
+        await db.execute(select(Module).where(Module.id == module_id))
+    ).scalar_one_or_none()
+    if not module_row:
+        raise HTTPException(404, "Module not found")
+
+    lesson_rows = (
+        await db.execute(
+            select(Lesson).where(Lesson.module_id == module_id).order_by(Lesson.index)
+        )
+    ).scalars().all()
+    total = len(lesson_rows) or 1
+    lessons = []
+    for lesson_row in lesson_rows:
+        practice = lesson_row.practice or {}
+        lesson_payload = {
+            "hook": practice.get("hook", ""),
+            "body": lesson_row.body or "",
+            "key_terms": practice.get("key_terms", []),
+            "exercises": practice.get("exercises", []),
+            "mini_game": practice.get("mini_game"),
+            "final_check": practice.get("final_check"),
+        }
+        quality = score_lesson_quality(
+            lesson_payload,
+            subject=module_row.subject,
+            topic=module_row.topic,
+            position=lesson_row.index,
+            total=total,
+        )
+        lessons.append({
+            "id": lesson_row.id,
+            "index": lesson_row.index,
+            "title": lesson_row.title,
+            "body_len": len(lesson_row.body or ""),
+            "exercise_count": len(practice.get("exercises") or []),
+            "has_mini_game": bool(practice.get("mini_game")),
+            "has_final_check": bool(practice.get("final_check")),
+            "quality": quality,
+        })
+    average = (
+        sum(item["quality"]["score"] for item in lessons) // len(lessons)
+        if lessons
+        else 0
+    )
+    return {
+        "module_id": module_id,
+        "topic": module_row.topic,
+        "subject": module_row.subject,
+        "quality": {
+            "score": average,
+            "passed": bool(lessons) and average >= 75 and all(item["quality"]["passed"] for item in lessons),
+        },
+        "lessons": lessons,
     }
 
 
