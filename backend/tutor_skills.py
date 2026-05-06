@@ -481,20 +481,140 @@ async def generate_lesson_content(
         f"Acoperă: {lesson_subject}\n"
         f"{mg_hint}"
     )
-    raw = await _call_ai(system, user, json_mode=True, max_tokens=1200)
-    try:
-        result = json.loads(raw)
-    except json.JSONDecodeError:
-        result = {}
+    for attempt in range(2):
+        prompt = user
+        if attempt:
+            prompt += (
+                "\nRăspunsul anterior a fost incomplet. Returnează JSON valid cu "
+                "body ne-gol și EXACT 1 exercițiu bazat pe body."
+            )
+        try:
+            raw = await _call_ai(
+                system,
+                prompt,
+                json_mode=True,
+                max_tokens=1800 if include_mini_game else 1400,
+            )
+            result = _parse_json_object(raw)
+        except Exception:
+            result = {}
+        result = _normalize_lesson_content(result)
+        if _has_lesson_content(result):
+            return result
 
-    # Defensive defaults
-    result.setdefault("hook", "")
-    result.setdefault("body", "")
-    result.setdefault("key_terms", [])
-    result.setdefault("exercises", [])
-    if "mini_game" not in result:
-        result["mini_game"] = None
-    return result
+    return _fallback_lesson_content(
+        subject=subject,
+        topic=topic,
+        lesson_title=lesson_title,
+        lesson_subject=lesson_subject,
+        include_mini_game=include_mini_game,
+    )
+
+
+def _parse_json_object(raw: str) -> dict:
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start < 0 or end <= start:
+            return {}
+        try:
+            parsed = json.loads(raw[start:end + 1])
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
+
+def _normalize_lesson_content(result: dict) -> dict:
+    hook = result.get("hook")
+    body = result.get("body")
+    key_terms = result.get("key_terms")
+    exercises = result.get("exercises")
+    return {
+        "hook": hook.strip() if isinstance(hook, str) else "",
+        "body": body.strip() if isinstance(body, str) else "",
+        "key_terms": key_terms if isinstance(key_terms, list) else [],
+        "exercises": exercises if isinstance(exercises, list) else [],
+        "mini_game": result.get("mini_game") if isinstance(result, dict) else None,
+    }
+
+
+def _has_lesson_content(result: dict) -> bool:
+    body = result.get("body")
+    exercises = result.get("exercises")
+    return (
+        isinstance(body, str)
+        and len(body.strip()) >= 80
+        and isinstance(exercises, list)
+        and len(exercises) > 0
+    )
+
+
+def _fallback_lesson_content(
+    subject: str,
+    topic: str,
+    lesson_title: str,
+    lesson_subject: str,
+    include_mini_game: bool,
+) -> dict:
+    if subject == "Programare":
+        body = (
+            f"{lesson_title} pornește de la o idee simplă: {lesson_subject}. "
+            f"În {topic}, nu înveți ca să memorezi definiții, ci ca să faci un "
+            "mic rezultat care rulează.\n\n"
+            "Exemplu scurt:\n```js\nconst nume = 'Ana';\nconsole.log(nume);\n```\n"
+            "Aici creezi o valoare și o afișezi. E ca o etichetă pe un sertar: "
+            "știi unde ai pus ceva și îl poți folosi mai târziu.\n\n"
+            "Schimbă valoarea și rulează din nou:\n```js\nconst nume = 'Mihai';\n"
+            "console.log('Salut, ' + nume);\n```\nAsta e baza: modifici puțin, "
+            "vezi imediat efectul, apoi construiești peste."
+        )
+        exercise = {
+            "type": "code",
+            "prompt": "Scrie 2 linii: creează `nume` cu valoarea 'Alex' și afișează-l.",
+            "expected": "const nume = 'Alex';\nconsole.log(nume);",
+            "hint": "Folosește exact modelul cu `const` și `console.log` din lecție.",
+        }
+        game = {
+            "type": "bug_hunter",
+            "prompt": "Găsește linia care nu respectă exemplul.",
+            "lines": [
+                "const nume = 'Alex';",
+                "console.log(nume);",
+                "console.log(varsta);",
+            ],
+            "buggy_index": 2,
+            "fix": "console.log(nume);",
+        } if include_mini_game else None
+    else:
+        body = (
+            f"{lesson_title} înseamnă să iei {lesson_subject} și să-l folosești "
+            f"într-un exemplu concret despre {topic}. Nu încerca să reții tot; "
+            "caută primul pas care îți dă un rezultat vizibil.\n\n"
+            "Model simplu: vezi ideea, o repeți cu un exemplu, apoi schimbi un "
+            "detaliu. Așa creierul nu primește un zid de teorie, ci o bucată "
+            "mică pe care o poate testa.\n\n"
+            "Regula pentru această lecție: explică ideea în cuvintele tale, apoi "
+            "dă un exemplu propriu. Dacă poți face asta fără să copiezi textul, "
+            "ai înțeles suficient ca să mergi mai departe."
+        )
+        exercise = {
+            "type": "fill",
+            "prompt": "Completează: întâi înțeleg ideea, apoi dau un ___ propriu.",
+            "blanks": ["exemplu"],
+            "hint": "Cuvântul apare în lecție de mai multe ori.",
+        }
+        game = None
+
+    return {
+        "hook": "Înveți mai repede când vezi imediat ce poți face cu ideea.",
+        "body": body,
+        "key_terms": [topic, lesson_subject, "exemplu"],
+        "exercises": [exercise],
+        "mini_game": game,
+    }
 
 
 # ═══════════════════════════════════════════════════════════
