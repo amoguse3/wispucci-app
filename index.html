@@ -22,8 +22,8 @@
       <div class="orb-stage" id="welcomeOrb" data-orb-host="welcome">
         <!-- Orb element will be moved here / to corner via FLIP -->
       </div>
-      <h1 class="display"><em>Învățăm</em> ce te interesează.<br/><span class="muted"><em>Nu ce zice</em> manualul.</span></h1>
-      <p class="lead">Un tutor AI care îți face manualul tău, în limbajul tău,<br/>și stă cu tine până înțelegi.</p>
+      <h1 class="display"><em>Transformă</em> orice subiect<br/><span class="muted"><em>într-un</em> mini-curs interactiv.</span></h1>
+      <p class="lead">Wispucci îți face un traseu personal: promisiune clară,<br/>lecții scurte, practică și feedback imediat.</p>
       <button class="btn btn-primary" data-go="onboarding-1">Începe</button>
       <p class="footnote">durează 30 de secunde · <a href="#" data-go="auth-login" class="footnote-link">am deja cont</a></p>
     </div>
@@ -56,7 +56,7 @@
     <div class="auth-wrap">
       <div class="orb-mini-host" data-orb-host="auth-signup"></div>
       <h2 class="display"><em>Salvează</em> progresul.</h2>
-      <p class="lead muted">Cont gratuit. Streak-ul tău, lecțiile tale, leaderboard.</p>
+      <p class="lead muted">Cont gratuit. Îți salvez cursul generat, streak-ul și progresul.</p>
       <form class="auth-form" id="signupForm" autocomplete="on" novalidate>
         <label class="auth-field">
           <span class="auth-label">cum te cheamă</span>
@@ -246,105 +246,110 @@
         <span class="orb-line-name">Wispucci</span>
         <span class="orb-line-text" data-orb-line>Bun. De unde începem?</span>
       </div>
-      <div class="ob-progress"><span class="dot is-on"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+      <div class="ob-progress"><span class="dot is-on"></span><span class="dot"></span><span class="dot"></span></div>
     </header>
     <div class="ob-body ob-body-center">
-      <h2 class="h1"><em>Ce</em> vrei să înveți?</h2>
-      <p class="lead muted">Alege un subiect. Putem schimba oricând.</p>
-      <div class="card-grid">
-        <button class="card-pick" data-go="onboarding-2" data-subject="Programare">
-          <div class="card-icon">&lt;/&gt;</div>
-          <div class="card-title">Programare</div>
-          <div class="card-sub">Python · JS · Rust · Go</div>
-          <div class="card-tag">cel mai cerut</div>
-        </button>
-        <button class="card-pick" data-go="onboarding-2" data-subject="Limbă străină">
-          <div class="card-icon">あ</div>
-          <div class="card-title">Limbă străină</div>
-          <div class="card-sub">EN · ES · DE · JP · RO</div>
-          <div class="card-tag">conversație reală</div>
-        </button>
-        <button class="card-pick" data-go="onboarding-2" data-subject="Matematică">
-          <div class="card-icon">∑</div>
-          <div class="card-title">Matematică</div>
-          <div class="card-sub">algebră · analiză · stats</div>
-          <div class="card-tag">de la zero · în ritm</div>
-        </button>
-        <button class="card-pick" data-go="onboarding-2" data-subject="Altceva">
-          <div class="card-icon">+</div>
-          <div class="card-title">Altceva</div>
-          <div class="card-sub">scrii tu, eu construiesc</div>
-          <div class="card-tag">orice subiect</div>
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============== ECRAN 2B — ONBOARDING: ce anume ============== -->
-  <section class="view view-onboarding" data-view="onboarding-2">
-    <header class="ob-head">
-      <div class="orb-mini-host" data-orb-host="onboarding-2"></div>
-      <div class="orb-line">
-        <span class="orb-line-name">Wispucci</span>
-        <span class="orb-line-text" data-orb-line>Acum ceva mai concret.</span>
-      </div>
-      <div class="ob-progress"><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot"></span><span class="dot"></span></div>
-    </header>
-    <div class="ob-body ob-body-center">
-      <h2 class="h1"><em>Ce anume</em> <span class="accent" id="subjectEcho">programare</span>?</h2>
-      <p class="lead muted">Alege un punct de start. Poți schimba mai târziu.</p>
-      <div class="topic-grid" id="topicGrid">
-        <!-- dynamic topic cards -->
-      </div>
-      <form class="topic-custom" id="customTopicForm" autocomplete="off">
-        <span class="muted">sau</span>
-        <input class="topic-input" id="customTopicInput" name="topic" placeholder="scrie ce vrei tu — ex. „ințeleg promise-uri în JS”" maxlength="120" />
-        <button class="btn-ghost topic-input-go" type="submit" aria-label="începe">→</button>
+      <h2 class="h1"><em>Ce</em> vrei să înțelegi?</h2>
+      <p class="lead muted">Scrie orice subiect. Eu îl transform într-un mini-curs cu practică, nu într-un articol lung.</p>
+      <form class="course-intent" id="courseIntentForm" autocomplete="off">
+        <label class="course-intent-label" for="courseIntentInput">subiectul tău</label>
+        <div class="course-intent-row">
+          <input class="course-intent-input" id="courseIntentInput" name="topic" placeholder="ex. React hooks fără confuzie" maxlength="120" />
+          <button class="btn btn-primary course-intent-submit" type="submit">Generează preview</button>
+        </div>
+        <p class="course-intent-hint">Alege un exemplu dacă nu știi ce să scrii.</p>
       </form>
+      <div class="shortcut-grid" id="shortcutGrid">
+        <button class="shortcut-card" data-shortcut-topic="JavaScript variables" data-shortcut-subject="Programare">
+          <span class="shortcut-kicker">cod</span>
+          <span class="shortcut-title">JavaScript variables</span>
+          <span class="shortcut-sub">scrii primul snippet + feedback</span>
+        </button>
+        <button class="shortcut-card" data-shortcut-topic="Spanish for travel" data-shortcut-subject="Limbă străină">
+          <span class="shortcut-kicker">limbă</span>
+          <span class="shortcut-title">Spanish for travel</span>
+          <span class="shortcut-sub">fraze reale pentru aeroport/cafenea</span>
+        </button>
+        <button class="shortcut-card" data-shortcut-topic="Linear algebra for ML" data-shortcut-subject="Matematică">
+          <span class="shortcut-kicker">math</span>
+          <span class="shortcut-title">Linear algebra for ML</span>
+          <span class="shortcut-sub">vectori, matrice, intuiție practică</span>
+        </button>
+        <button class="shortcut-card" data-shortcut-topic="How taxes work in Romania" data-shortcut-subject="Altceva">
+          <span class="shortcut-kicker">viață</span>
+          <span class="shortcut-title">How taxes work in Romania</span>
+          <span class="shortcut-sub">exemple simple, fără jargon</span>
+        </button>
+      </div>
     </div>
   </section>
 
-  <!-- ============== ECRAN 2C — ONBOARDING: nivel ============== -->
+  <!-- ============== ECRAN 2B — ONBOARDING: nivel + preview ============== -->
   <section class="view view-onboarding" data-view="onboarding-3">
     <header class="ob-head">
       <div class="orb-mini-host" data-orb-host="onboarding-3"></div>
       <div class="orb-line">
         <span class="orb-line-name">Wispucci</span>
-        <span class="orb-line-text" data-orb-line>Ultima decizie. Promit.</span>
+        <span class="orb-line-text" data-orb-line>Îți arăt traseul înainte să-l salvezi.</span>
       </div>
-      <div class="ob-progress"><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot"></span></div>
+      <div class="ob-progress"><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot"></span></div>
     </header>
-    <div class="ob-body ob-body-center">
-      <h2 class="h1"><em>Cât</em> știi deja?</h2>
-      <p class="lead muted">Nu te subestima. Putem urca repede.</p>
-      <div class="level-grid">
-        <button class="level" data-level="0">
-          <div class="lv-head"><div class="lv-num">0</div><div class="lv-label">Zero</div></div>
-          <div class="lv-sub">de la început — explic chiar și ce e o variabilă</div>
-          <div class="lv-skills"><span>variabile</span><span>print</span><span>operatori</span></div>
-          <div class="lv-bar"><i style="width:10%"></i></div>
-        </button>
-        <button class="level" data-level="1">
-          <div class="lv-head"><div class="lv-num">1</div><div class="lv-label">Începător</div></div>
-          <div class="lv-sub">am atins puțin — știu ce-i un if, dar nu știu când</div>
-          <div class="lv-skills"><span>condiții</span><span>liste</span><span>buclele for</span></div>
-          <div class="lv-bar"><i style="width:35%"></i></div>
-        </button>
-        <button class="level is-on" data-level="2">
-          <div class="lv-head"><div class="lv-num">2</div><div class="lv-label">Mediu</div></div>
-          <div class="lv-sub">știu bazele — vreau să le folosesc bine</div>
-          <div class="lv-skills"><span>funcții</span><span>scope</span><span>OOP basics</span></div>
-          <div class="lv-bar"><i style="width:65%"></i></div>
-        </button>
-        <button class="level" data-level="3">
-          <div class="lv-head"><div class="lv-num">3</div><div class="lv-label">Avansat</div></div>
-          <div class="lv-sub">vreau profunzime — patterns, perf, edge cases</div>
-          <div class="lv-skills"><span>generators</span><span>async</span><span>perf</span></div>
-          <div class="lv-bar"><i style="width:90%"></i></div>
-        </button>
+    <div class="ob-body ob-body-center ob-preview-body">
+      <div class="preview-layout">
+        <div class="preview-left">
+          <h2 class="h1"><em>Preview</em> pentru cursul tău.</h2>
+          <p class="lead muted">Alege nivelul. Wispucci va genera apoi lecțiile reale și primul exercițiu.</p>
+          <div class="level-grid">
+            <button class="level" data-level="0">
+              <div class="lv-head"><div class="lv-num">0</div><div class="lv-label">Zero</div></div>
+              <div class="lv-sub">pornești fără vocabular; explic de la primul exemplu</div>
+              <div class="lv-skills"><span>simplu</span><span>ghidat</span><span>lent</span></div>
+              <div class="lv-bar"><i style="width:10%"></i></div>
+            </button>
+            <button class="level" data-level="1">
+              <div class="lv-head"><div class="lv-num">1</div><div class="lv-label">Începător</div></div>
+              <div class="lv-sub">ai auzit concepte, dar vrei ordine și exemple</div>
+              <div class="lv-skills"><span>clar</span><span>exemple</span><span>ritm</span></div>
+              <div class="lv-bar"><i style="width:35%"></i></div>
+            </button>
+            <button class="level is-on" data-level="2">
+              <div class="lv-head"><div class="lv-num">2</div><div class="lv-label">Mediu</div></div>
+              <div class="lv-sub">știi bazele și vrei să le aplici fără confuzie</div>
+              <div class="lv-skills"><span>practic</span><span>challenge</span><span>rapid</span></div>
+              <div class="lv-bar"><i style="width:65%"></i></div>
+            </button>
+            <button class="level" data-level="3">
+              <div class="lv-head"><div class="lv-num">3</div><div class="lv-label">Avansat</div></div>
+              <div class="lv-sub">vrei profunzime, edge cases și un mini-proiect</div>
+              <div class="lv-skills"><span>deep dive</span><span>edge</span><span>proiect</span></div>
+              <div class="lv-bar"><i style="width:90%"></i></div>
+            </button>
+          </div>
+        </div>
+        <aside class="course-preview-card" aria-live="polite">
+          <div class="preview-kicker">curs generat pentru tine</div>
+          <h3 id="previewTitle">React hooks fără confuzie</h3>
+          <p id="previewPromise">În ~20 min vei avea un traseu clar, cu exemple și exerciții verificate.</p>
+          <div class="preview-meta-row">
+            <span>4 lecții</span>
+            <span>3–5 min/lecție</span>
+            <span>feedback imediat</span>
+          </div>
+          <ol class="preview-lessons" id="previewLessons"></ol>
+          <div class="preview-exercise">
+            <span class="preview-exercise-label">primul exercițiu</span>
+            <p id="previewExercise">Aplici ideea în 60 secunde, apoi Wispucci îți verifică răspunsul.</p>
+            <form class="preview-exercise-form" id="previewExerciseForm" autocomplete="off">
+              <input id="previewExerciseInput" class="preview-exercise-input" placeholder="scrie răspunsul tău scurt" maxlength="120" />
+              <button class="btn-ghost preview-exercise-check" type="submit">Verifică</button>
+            </form>
+            <p class="preview-feedback" id="previewFeedback" hidden></p>
+          </div>
+        </aside>
       </div>
       <div class="cta-row">
-        <button class="btn btn-primary" data-go="onboarding-4">Construiește lecția</button>
+        <button class="btn btn-ghost" data-go="onboarding-1">Schimbă subiectul</button>
+        <button class="btn btn-primary" data-go="onboarding-4">Construiește cursul</button>
       </div>
     </div>
   </section>
@@ -357,13 +362,13 @@
         <span class="orb-line-name">Wispucci</span>
         <span class="orb-line-text" data-orb-line>Construiesc. Stai cu mine.</span>
       </div>
-      <div class="ob-progress"><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot is-on"></span></div>
+      <div class="ob-progress"><span class="dot is-on"></span><span class="dot is-on"></span><span class="dot is-on"></span></div>
     </header>
     <div class="ob-body gen-body">
       <canvas class="gen-stream" id="genStream"></canvas>
       <div class="gen-head">
-        <h2 class="h1"><em>Construiesc</em> lecția ta…</h2>
-        <p class="lead muted">4 module · ~25 min · stau cu tine pas cu pas.</p>
+        <h2 class="h1"><em>Construiesc</em> cursul tău…</h2>
+        <p class="lead muted">Verific promisiunea, ordinea lecțiilor și primul exercițiu.</p>
       </div>
 
       <div class="gen-stage">

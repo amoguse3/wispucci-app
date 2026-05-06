@@ -146,8 +146,8 @@ const Store = (() => {
 })();
 
 const state = {
-  subject: 'Programare',
-  topic: 'Python — bazele',
+  subject: 'Altceva',
+  topic: 'React hooks fără confuzie',
   level: 2,
   progress: Store.get().lessonProgress,
   view: 'welcome',
@@ -155,46 +155,7 @@ const state = {
   currentLesson: null,     // lesson object from backend
   leaderboardPeriod: 'weekly',
   statsCache: null,
-};
-
-// =========================================================
-// TOPICS — subject → list of starter topic cards
-// =========================================================
-const TOPICS = {
-  'Programare': [
-    { title: 'Python — bazele', sub: 'Variabile · funcții · liste', icon: 'PY', est: '4 lecții · 20 min' },
-    { title: 'JavaScript modern', sub: 'ES6+ · async · DOM',         icon: 'JS', est: '4 lecții · 25 min' },
-    { title: 'Rust',             sub: 'Ownership · borrow · traits', icon: 'RS', est: '4 lecții · 30 min' },
-    { title: 'Go',               sub: 'Concurency · interfaces',     icon: 'GO', est: '4 lecții · 22 min' },
-    { title: 'Algoritmi',        sub: 'Sortări · căutări · grafuri', icon: '∑',  est: '4 lecții · 30 min' },
-    { title: 'OOP',              sub: 'Clase · moștenire · polim.',  icon: '◇',  est: '4 lecții · 18 min' },
-    { title: 'Web — front',      sub: 'HTML · CSS · React',          icon: '⌘',  est: '4 lecții · 28 min' },
-    { title: 'API REST',         sub: 'HTTP · JSON · auth',          icon: '⇄',  est: '4 lecții · 22 min' },
-  ],
-  'Limbă străină': [
-    { title: 'Engleză',     sub: 'B1 → B2 conversațional', icon: 'EN', est: 'continuu · 10 min/zi' },
-    { title: 'Spaniolă',    sub: 'gramatică + audio',       icon: 'ES', est: 'continuu · 10 min/zi' },
-    { title: 'Germană',     sub: 'cazuri + verbe tari',     icon: 'DE', est: 'continuu · 10 min/zi' },
-    { title: 'Japoneză',    sub: 'hiragana → kanji',        icon: '日', est: 'continuu · 10 min/zi' },
-    { title: 'Română',      sub: 'pentru străini',          icon: 'RO', est: 'continuu · 10 min/zi' },
-    { title: 'Conversație', sub: 'oral + corectări live',   icon: '💬', est: 'continuu · 15 min/zi' },
-  ],
-  'Matematică': [
-    { title: 'Algebră',         sub: 'expresii · ecuații · sistem', icon: 'a+b', est: '4 lecții · 28 min' },
-    { title: 'Analiză',         sub: 'limite · derivate · integ.',  icon: '∫',   est: '4 lecții · 32 min' },
-    { title: 'Statistică',      sub: 'medii · varianță · teste',    icon: 'σ',   est: '4 lecții · 22 min' },
-    { title: 'Trigonometrie',   sub: 'sin · cos · identități',      icon: 'θ',   est: '4 lecții · 20 min' },
-    { title: 'Logaritmi',       sub: 'log · exp · ecuații',         icon: 'log', est: '4 lecții · 18 min' },
-    { title: 'Probabilități',   sub: 'evenimente · Bayes',          icon: 'P',   est: '4 lecții · 22 min' },
-  ],
-  'Altceva': [
-    { title: 'Fizică',     sub: 'mecanică · electricitate', icon: 'φ', est: '4 lecții · 28 min' },
-    { title: 'Chimie',     sub: 'organic · reacții',         icon: 'C', est: '4 lecții · 22 min' },
-    { title: 'Istorie',    sub: 'epoci · procese',           icon: 'H', est: '4 lecții · 30 min' },
-    { title: 'Biologie',   sub: 'celulă · genetică',         icon: 'β', est: '4 lecții · 24 min' },
-    { title: 'Filozofie',  sub: 'logică · etică',            icon: 'Φ', est: '4 lecții · 22 min' },
-    { title: 'Economie',   sub: 'micro · macro · finanțe',   icon: '€', est: '4 lecții · 24 min' },
-  ],
+  pendingGenerationAfterSignup: false,
 };
 
 // =========================================================
@@ -402,31 +363,8 @@ function showView(name) {
   $$('.view').forEach(v => v.classList.toggle('is-active', v.dataset.view === name));
   state.view = name;
 
-  // Onboarding-2 dynamic content
-  if (name === 'onboarding-2') {
-    $('#subjectEcho').textContent = state.subject.toLowerCase();
-    const grid = $('#topicGrid');
-    grid.innerHTML = '';
-    (TOPICS[state.subject] || []).forEach(t => {
-      const b = document.createElement('button');
-      b.className = 'topic-card';
-      b.innerHTML = `
-        <div class="topic-card-icon">${t.icon}</div>
-        <div class="topic-card-title">${t.title}</div>
-        <div class="topic-card-sub">${t.sub}</div>
-        <div class="topic-card-est">${t.est}</div>
-      `;
-      b.addEventListener('click', () => {
-        state.topic = t.title;
-        showView('onboarding-3');
-      });
-      grid.appendChild(b);
-    });
-    // Reset the custom topic input each time we land here (avoids leaking
-    // value from a previous session).
-    const customInput = $('#customTopicInput');
-    if (customInput) customInput.value = '';
-  }
+  if (name === 'onboarding-1') hydrateCourseIntent();
+  if (name === 'onboarding-3') renderCoursePreview();
 
   // Close the mobile drawer on every navigation so it doesn't linger after
   // the user picks a destination.
@@ -473,14 +411,13 @@ function showView(name) {
   else if (name === 'auth-signup')  setOrbState('listening');
   else if (name === 'home')         setOrbState('happy');
   else if (name === 'onboarding-1') setOrbState('listening');
-  else if (name === 'onboarding-2') setOrbState('listening');
   else if (name === 'onboarding-3') setOrbState('listening');
   else if (name === 'onboarding-4') { setOrbState('thinking'); runGeneration(); }
   else if (name === 'lesson')       setOrbState('idle');
 
   const el = $(`.view[data-view="${name}"]`);
   if (el && window.gsap) {
-    gsap.from(el.querySelectorAll('.h1, .display, .lead, .card-grid, .topic-grid, .topic-custom, .level-grid, .gen-list, .gen-bar, .gen-pct, .lesson-card, .topnav, .ctxbar, .lesson-progress, .cta-row, .ob-progress, .orb-line, .footnote, .auth-form, .stats-row, .stats-section, .home-stats, .home-tiles, .recent-list'), {
+    gsap.from(el.querySelectorAll('.h1, .display, .lead, .card-grid, .shortcut-grid, .course-intent, .course-preview-card, .preview-layout, .topic-grid, .topic-custom, .level-grid, .gen-list, .gen-bar, .gen-pct, .lesson-card, .topnav, .ctxbar, .lesson-progress, .cta-row, .ob-progress, .orb-line, .footnote, .auth-form, .stats-row, .stats-section, .home-stats, .home-tiles, .recent-list'), {
       opacity: 0, y: 8, duration: .45, stagger: .03, ease: 'power2.out', delay: .12,
     });
   }
@@ -495,6 +432,12 @@ document.addEventListener('click', (e) => {
   if (btn.tagName === 'A') e.preventDefault();
   const target = btn.dataset.go;
   if (btn.dataset.subject) state.subject = btn.dataset.subject;
+  if (target === 'onboarding-4' && !Auth.isLoggedIn()) {
+    e.preventDefault();
+    state.pendingGenerationAfterSignup = true;
+    showView('auth-signup');
+    return;
+  }
   showView(target);
 });
 
@@ -504,28 +447,138 @@ $$('.level').forEach(el => {
     $$('.level').forEach(l => l.classList.remove('is-on'));
     el.classList.add('is-on');
     state.level = +el.dataset.level;
+    renderCoursePreview();
   });
 });
 
 // =========================================================
-// CUSTOM TOPIC INPUT (onboarding-2): Enter or "→" submits.
-// Previously this input had no handler at all — typing did nothing.
+// UNIVERSAL COURSE INTENT — any topic becomes a course preview.
 // =========================================================
-function _submitCustomTopic() {
-  const input = $('#customTopicInput');
-  if (!input) return;
-  const v = (input.value || '').trim();
+function hydrateCourseIntent() {
+  const input = $('#courseIntentInput');
+  if (input && !input.value) input.value = state.topic || '';
+}
+
+function inferSubjectFromTopic(topic) {
+  const v = (topic || '').toLowerCase();
+  if (/(javascript|python|react|html|css|rust|go|api|code|program|algorithm|algoritm)/.test(v)) return 'Programare';
+  if (/(spanish|english|german|japanese|franceză|engleză|spaniolă|germană|japoneză|limb)/.test(v)) return 'Limbă străină';
+  if (/(math|algebra|linear|matrix|vector|calculus|statistic|matematic)/.test(v)) return 'Matematică';
+  return 'Altceva';
+}
+
+function submitCourseIntent(topic, subject = '') {
+  const input = $('#courseIntentInput');
+  const raw = topic || (input && input.value) || '';
+  const v = raw.trim();
   if (v.length < 2) {
-    input.focus();
-    showToast('scrie ce vrei să înveți', '!');
+    if (input) input.focus();
+    showToast('scrie ce vrei să înțelegi', '!');
     return;
   }
   state.topic = v;
+  state.subject = subject || inferSubjectFromTopic(v);
+  renderCoursePreview();
   showView('onboarding-3');
 }
-$('#customTopicForm')?.addEventListener('submit', (e) => {
+
+function renderCoursePreview() {
+  const topic = (state.topic || 'subiectul tău').trim();
+  const subject = state.subject || inferSubjectFromTopic(topic);
+  const levelName = ['de la zero', 'începător', 'mediu', 'avansat'][state.level] || 'personalizat';
+
+  const title = $('#previewTitle');
+  const promise = $('#previewPromise');
+  const lessons = $('#previewLessons');
+  const exercise = $('#previewExercise');
+
+  if (title) title.textContent = topic;
+  if (promise) {
+    promise.textContent = `În ~20 min înțelegi ${topic} la nivel ${levelName}, cu pași mici și verificare după fiecare idee.`;
+  }
+  if (lessons) {
+    const items = previewLessonsFor(topic, subject);
+    lessons.innerHTML = items.map((item, i) => `
+      <li>
+        <span class="preview-lesson-num">${String(i + 1).padStart(2, '0')}</span>
+        <span>${escapeHtml(item)}</span>
+      </li>
+    `).join('');
+  }
+  if (exercise) exercise.textContent = previewExerciseFor(topic, subject);
+}
+
+function previewLessonsFor(topic, subject) {
+  const t = topic.replace(/\s+/g, ' ');
+  if (subject === 'Programare') {
+    return [
+      `Primul exemplu care rulează în ${t}`,
+      'Schimbi codul și vezi rezultatul',
+      'Greșeli frecvente + hint-uri',
+      'Mini-challenge cu feedback',
+    ];
+  }
+  if (subject === 'Limbă străină') {
+    return [
+      `Fraze utile pentru ${t}`,
+      'Pronunție + răspuns scurt',
+      'Dialog real de 60 secunde',
+      'Mini-test de conversație',
+    ];
+  }
+  if (subject === 'Matematică') {
+    return [
+      `Intuiția din spatele ${t}`,
+      'Exemplu rezolvat pe pași',
+      'Exercițiu cu verificare',
+      'Problemă mixtă de final',
+    ];
+  }
+  return [
+    `Ce trebuie să obții din ${t}`,
+    'Model mental simplu',
+    'Aplicare pe un caz real',
+    'Mini-test ca să verifici că ai prins',
+  ];
+}
+
+function previewExerciseFor(topic, subject) {
+  if (subject === 'Programare') return 'Scrii/editezi un snippet mic și primești feedback imediat.';
+  if (subject === 'Limbă străină') return 'Completezi o replică reală, apoi Wispucci corectează expresia.';
+  if (subject === 'Matematică') return 'Rezolvi un pas concret, nu doar citești teoria.';
+  return `Aplici ${topic} într-o situație scurtă și verificabilă.`;
+}
+
+$('#previewExerciseForm')?.addEventListener('submit', (e) => {
   e.preventDefault();
-  _submitCustomTopic();
+  const input = $('#previewExerciseInput');
+  const feedback = $('#previewFeedback');
+  const v = ((input && input.value) || '').trim();
+  if (!v) {
+    if (input) input.focus();
+    showToast('încearcă un răspuns scurt', '!');
+    return;
+  }
+  if (feedback) {
+    feedback.hidden = false;
+    feedback.textContent = 'Bun start. Salvează cursul ca să primești feedback complet pe lecția reală.';
+  }
+  setOrbState('happy');
+});
+
+$('#courseIntentForm')?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  submitCourseIntent();
+});
+
+$$('[data-shortcut-topic]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const topic = btn.dataset.shortcutTopic || '';
+    const subject = btn.dataset.shortcutSubject || '';
+    const input = $('#courseIntentInput');
+    if (input) input.value = topic;
+    submitCourseIntent(topic, subject);
+  });
 });
 
 // =========================================================
@@ -624,7 +677,12 @@ $('#signupForm')?.addEventListener('submit', async (e) => {
     Auth.token = data.token;
     Auth.user = data.user;
     showToast('bine ai venit la Wispucci', '✓');
-    showView('home');
+    if (state.pendingGenerationAfterSignup) {
+      state.pendingGenerationAfterSignup = false;
+      showView('onboarding-4');
+    } else {
+      showView('home');
+    }
   } catch (ex) {
     err.textContent = humanError(ex.message);
     err.hidden = false;
