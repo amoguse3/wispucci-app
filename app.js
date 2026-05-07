@@ -963,6 +963,7 @@ function applyLessonToView(lesson) {
   const hook = practice.hook || '';
   const body = lesson.body || '';
   const exercises = Array.isArray(practice.exercises) ? practice.exercises : [];
+  const finalCheck = practice.final_check || null;
   const moduleTitle = state.generatedModule?.title || state.topic || '';
   const lessonIdx = lesson.index || 1;
 
@@ -1020,6 +1021,7 @@ function applyLessonToView(lesson) {
           parts.push(`<p class="lesson-body">${safe}</p>`);
         }
       });
+      if (finalCheck) parts.push(renderFinalCheck(finalCheck));
     }
     theory.innerHTML = parts.join('\n');
   }
@@ -1093,6 +1095,20 @@ function applyLessonToView(lesson) {
 
   // Trigger mini-game lazy-load on next visit to that tab.
   _miniGameLoaded = false;
+}
+
+function renderFinalCheck(finalCheck) {
+  const criteria = Array.isArray(finalCheck.success_criteria)
+    ? finalCheck.success_criteria
+    : [];
+  return `
+    <section class="final-check-card">
+      <span class="preview-exercise-label">verificare finală</span>
+      <h4>${escapeHtml((finalCheck.type || 'project').toString())}</h4>
+      <p>${escapeHtml(finalCheck.prompt || 'Aplică ce ai învățat într-un mini-test.')}</p>
+      ${criteria.length ? `<ul>${criteria.map(item => `<li>${escapeHtml(String(item))}</li>`).join('')}</ul>` : ''}
+    </section>
+  `;
 }
 
 // Single source of truth for lesson navigation. Each lesson is one

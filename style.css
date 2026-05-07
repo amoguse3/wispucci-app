@@ -1598,6 +1598,31 @@ textarea.code-area::placeholder { color: var(--text-3); }
   padding: 1px 6px;
   border-radius: 4px;
 }
+.final-check-card {
+  margin-top: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid rgba(239,221,141,.2);
+  border-radius: var(--r-3);
+  background:
+    linear-gradient(135deg, rgba(239,221,141,.08), rgba(134,160,67,.06)),
+    rgba(24, 8, 47, .44);
+}
+.final-check-card h4 {
+  margin: 6px 0;
+  color: var(--accent-soft);
+  text-transform: capitalize;
+}
+.final-check-card p {
+  color: var(--text);
+  line-height: 1.55;
+  margin: 0 0 var(--s-3);
+}
+.final-check-card ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
 .code .blank {
   display: inline-block;
   min-width: 64px;

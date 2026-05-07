@@ -7,6 +7,7 @@ Default model: gpt-4o-mini (cheapest per-token across all providers).
 """
 import json
 import hashlib
+import re
 import time
 from typing import Any, AsyncIterator
 
@@ -236,9 +237,16 @@ _SUBJECT_GUIDE = {
     ),
     "Altceva": (
         "Domeniu: GENERAL. Concepte cheie + exemplu real din viață. "
-        "Mix de 'choice' și 'fill'."
+        "Mix de 'choice' și 'fill'. Fiecare lecție trebuie să aibă un scenariu "
+        "concret, nu eseu generic."
     ),
 }
+
+_GENERIC_FILLER_PATTERNS = (
+    r"\b(este important|foarte important|acest subiect este|în zilele noastre)\b",
+    r"\b(vom explora|vom discuta|vom învăța despre|în această lecție vom)\b",
+    r"\b(pentru a înțelege mai bine|joacă un rol crucial)\b",
+)
 
 
 def _tone_line(tone: str) -> str:
@@ -249,6 +257,28 @@ def _subject_line(subject: str) -> str:
     return _SUBJECT_GUIDE.get(subject, _SUBJECT_GUIDE["Altceva"])
 
 
+def _lesson_format_line(subject: str) -> str:
+    if subject == "Programare":
+        return (
+            "Format obligatoriu: 1 rezultat runnable → 1 exemplu de cod → "
+            "user editează cod. Body include bloc ```js/py/...``` și exercițiu code."
+        )
+    if subject == "Limbă străină":
+        return (
+            "Format obligatoriu: context real → 3 fraze utile → mini-dialog → "
+            "user completează o replică. Include pronunție scurtă [aprox]."
+        )
+    if subject == "Matematică":
+        return (
+            "Format obligatoriu: intuiție → exemplu numeric rezolvat pe pași → "
+            "user rezolvă un pas. Include formulă sau calcul concret."
+        )
+    return (
+        "Format obligatoriu: outcome concret → model mental → scenariu real → "
+        "user aplică ideea într-o situație verificabilă."
+    )
+
+
 # ═══════════════════════════════════════════════════════════
 # SKILL 1 — GENERARE CURS / MODUL (subject + tone aware)
 # ═══════════════════════════════════════════════════════════
@@ -256,6 +286,7 @@ def _subject_line(subject: str) -> str:
 COURSE_SYSTEM = """Ești Wispucci, tutor EdTech pentru Gen Z (12-25 ani, atenție 8s).
 {tone_line}
 {subject_line}
+{format_line}
 
 Output STRICT JSON, fără text în afara JSON. Construiești {count} lecții consecutive,
 de la bază la aplicație practică. Fiecare lecție:
@@ -267,6 +298,7 @@ de la bază la aplicație practică. Fiecare lecție:
 - exercises: 2-3 exerciții cu dificultate progresivă.
 - mini_game: opțional, doar 1 din 3 lecții. Tip: bug_hunter | code_assemble | output_predict
   (vezi schema mini_game mai jos).
+- final_check: DOAR pentru ultima lecție. Un mini-proiect/mini-test care verifică outcome-ul cursului.
 Tipuri de exerciții:
   fill — {type:"fill", prompt:"...", blanks:["r1","r2"], hint:"..."}
   choice — {type:"choice", prompt:"...", options:["a","b","c","d"], answer:0}
@@ -276,6 +308,8 @@ Schema mini_game (toate optional, alegi 1 tip):
   bug_hunter — {type:"bug_hunter", prompt:"găsește bug-ul", lines:["l1","l2",...], buggy_index:N, fix:"corecție"}
   code_assemble — {type:"code_assemble", prompt:"...", blocks:["b1","b2","b3"], correct_order:[2,0,1]}
   output_predict — {type:"output_predict", prompt:"...", code:"...", options:["a","b","c"], answer:0}
+Schema final_check:
+  {"type":"project|quiz","prompt":"task concret","success_criteria":["2-4 criterii verificabile"]}
 Răspuns DOAR JSON, zero caractere în plus."""
 
 
@@ -286,9 +320,10 @@ def _build_course_prompt(
     lvl = level_labels.get(level, "mediu")
     return (
         f"Subiect:{subject}\nTopic:{topic}\nNivel:{lvl}({level}/3)\n"
-        f"Generează {lesson_count} lecții. Prima — conceptul de bază + de ce contează. "
-        f"Ultima — aplicație practică (proiect mic). "
-        f"Adaugă mini_game la cel puțin 1 lecție."
+        f"Outcome curs: în ~20 min userul poate aplica {topic} într-un caz real.\n"
+        f"Generează {lesson_count} lecții. Prima — primul rezultat concret + de ce contează. "
+        f"Fiecare lecție are acțiune verificabilă. Ultima — final_check cu proiect/test mic. "
+        f"Adaugă mini_game la lecția 1 sau ultima."
     )
 
 
@@ -309,17 +344,53 @@ async def generate_course(
         .replace("{count}", str(lesson_count))
         .replace("{tone_line}", _tone_line(tone))
         .replace("{subject_line}", _subject_line(subject))
+        .replace("{format_line}", _lesson_format_line(subject))
     )
     user = _build_course_prompt(subject, topic, level, lesson_count)
-    raw = await _call_ai(system, user, json_mode=True, max_tokens=3072)
-    try:
-        result = json.loads(raw)
-    except json.JSONDecodeError:
-        result = json.loads(_mock_response(user))
-    # Ensure minimum structure
-    result.setdefault("title", f"{topic} — {subject}")
-    result.setdefault("lessons", [])
-    return result
+    best_result: dict | None = None
+    best_score = -1
+    for attempt in range(2):
+        prompt = user
+        if attempt:
+            prompt += (
+                "\nRegenerare: cursul anterior a fost prea slab/generic. "
+                "Fiecare lecție trebuie să aibă body >=120 cuvinte, exerciții, "
+                "progresie clară și final_check în ultima lecție."
+            )
+        raw = await _call_ai(system, prompt, json_mode=True, max_tokens=3072)
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            result = json.loads(_mock_response(user))
+        result = _normalize_course_result(result, subject, topic)
+        quality = score_course_quality(result, subject=subject, topic=topic, level=level)
+        result["quality"] = quality
+        if quality["score"] > best_score:
+            best_result = result
+            best_score = quality["score"]
+        if quality["passed"]:
+            return result
+
+    fallback = best_result or _normalize_course_result(json.loads(_mock_response(user)), subject, topic)
+    repaired_lessons = []
+    lessons = fallback.get("lessons", [])
+    for index, lesson in enumerate(lessons):
+        repaired = _repair_lesson_content(
+            lesson,
+            subject=subject,
+            topic=topic,
+            lesson_title=str(lesson.get("title") or f"Lecția {index + 1}"),
+            lesson_subject=str(lesson.get("title") or topic),
+            include_mini_game=index in (0, len(lessons) - 1),
+            include_final_check=index == len(lessons) - 1,
+            position=index + 1,
+            total=len(lessons),
+        )
+        repaired["title"] = str(lesson.get("title") or f"Lecția {index + 1}")
+        repaired_lessons.append(repaired)
+    fallback["lessons"] = repaired_lessons
+    fallback["quality"] = score_course_quality(fallback, subject=subject, topic=topic, level=level)
+    return fallback
 
 
 # ═══════════════════════════════════════════════════════════
@@ -331,6 +402,7 @@ async def generate_course(
 OUTLINE_SYSTEM = """Ești Wispucci, tutor EdTech pentru Gen Z (12-25 ani).
 {tone_line}
 {subject_line}
+{format_line}
 
 Generează DOAR scheletul cursului — titluri și subiecte scurte.
 NU genera body, NU exerciții, NU mini-game. Doar structura.
@@ -338,6 +410,7 @@ NU genera body, NU exerciții, NU mini-game. Doar structura.
 Output STRICT JSON:
 {
   "title": "Titlu modul (max 40 char, captivant, NU 'Curs de Python')",
+  "outcome": "ce poate face userul după ~20 min",
   "lessons": [
     {
       "title": "titlu scurt cu verb (max 36 char)",
@@ -349,7 +422,7 @@ Output STRICT JSON:
 }
 
 Lecțiile merg de la BAZĂ → APLICAȚIE PRACTICĂ. Prima lecție răspunde
-la 'de ce contează'. Ultima — proiect mic concret. Tags = key concepts."""
+la 'de ce contează'. Ultima — proiect mic/test final concret. Tags = key concepts."""
 
 
 async def generate_course_outline(
@@ -369,13 +442,16 @@ async def generate_course_outline(
         OUTLINE_SYSTEM
         .replace("{tone_line}", _tone_line(tone))
         .replace("{subject_line}", _subject_line(subject))
+        .replace("{format_line}", _lesson_format_line(subject))
     )
     level_labels = {0: "zero absolut", 1: "începător", 2: "mediu", 3: "avansat"}
     lvl = level_labels.get(level, "mediu")
     user = (
         f"Subiect:{subject}\nTopic:{topic}\nNivel:{lvl}\n"
+        f"Outcome: userul aplică {topic} într-un caz real în ~20 min.\n"
         f"Generează schelet de {lesson_count} lecții, hook-driven. "
-        f"Fiecare titlu ≤36 caractere, începe cu verb dacă se poate."
+        f"Fiecare titlu ≤36 caractere, începe cu verb dacă se poate. "
+        f"Ultima lecție include test/proiect final."
     )
     raw = await _call_ai(system, user, json_mode=True, max_tokens=400)
     try:
@@ -385,6 +461,8 @@ async def generate_course_outline(
 
     # Defensive defaults so the frontend never sees an empty UI.
     result.setdefault("title", f"{topic} — {subject}")
+    if not isinstance(result.get("outcome"), str) or not result["outcome"].strip():
+        result["outcome"] = f"Aplici {topic} într-un caz real, fără text generic."
     if not isinstance(result.get("lessons"), list) or not result["lessons"]:
         result["lessons"] = [
             {
@@ -401,6 +479,7 @@ async def generate_course_outline(
 LESSON_CONTENT_SYSTEM = """Ești Wispucci, tutor EdTech pentru Gen Z (12-25 ani, atenție 8s).
 {tone_line}
 {subject_line}
+{format_line}
 
 Generezi UNA SINGURĂ lecție completă. Nu inventa altele.
 
@@ -421,7 +500,8 @@ Output STRICT JSON, fără text în afara JSON:
   "exercises": [
     {"type":"fill","prompt":"...","blanks":["r1"],"hint":"..."}
   ],
-  "mini_game": null
+  "mini_game": null,
+  "final_check": null
 }
 
 EXACT 1 exercițiu. Tipuri: fill | choice | code.
@@ -446,7 +526,10 @@ Reguli stricte JSON:
 mini_game: opțional. Dacă incluzi, alege UN tip:
   bug_hunter | code_assemble | output_predict | word_match (limbi)
 și respectă schema lor strictă. Mini-game-ul are aceeași regulă: doar
-concepte deja prezentate în body."""
+concepte deja prezentate în body.
+
+final_check: DOAR pentru ultima lecție. Dacă e ultima, include:
+{"type":"project|quiz","prompt":"ce face userul","success_criteria":["2-4 criterii"]}"""
 
 
 async def generate_lesson_content(
@@ -471,22 +554,30 @@ async def generate_lesson_content(
         LESSON_CONTENT_SYSTEM
         .replace("{tone_line}", _tone_line(tone))
         .replace("{subject_line}", _subject_line(subject))
+        .replace("{format_line}", _lesson_format_line(subject))
     )
     level_labels = {0: "zero absolut", 1: "începător", 2: "mediu", 3: "avansat"}
     lvl = level_labels.get(level, "mediu")
     mg_hint = "Adaugă mini_game (1 obiect, vezi schema)." if include_mini_game else "mini_game = null."
+    final_hint = (
+        "Este ultima lecție: include final_check cu mini-proiect/test verificabil."
+        if position == total
+        else "final_check = null."
+    )
     user = (
         f"Subiect:{subject}\nTopic:{topic}\nNivel:{lvl}\n"
         f"Lecția {position}/{total}: {lesson_title}\n"
         f"Acoperă: {lesson_subject}\n"
-        f"{mg_hint}"
+        f"{mg_hint}\n{final_hint}"
     )
-    for attempt in range(2):
+    best_result: dict | None = None
+    best_score = -1
+    for attempt in range(3):
         prompt = user
         if attempt:
             prompt += (
                 "\nRăspunsul anterior a fost incomplet. Returnează JSON valid cu "
-                "body ne-gol și EXACT 1 exercițiu bazat pe body."
+                "hook, body concret, EXACT 1 exercițiu bazat pe body, zero filler generic."
             )
         try:
             raw = await _call_ai(
@@ -499,16 +590,42 @@ async def generate_lesson_content(
         except Exception:
             result = {}
         result = _normalize_lesson_content(result)
-        if _has_lesson_content(result):
+        quality = score_lesson_quality(
+            result,
+            subject=subject,
+            topic=topic,
+            position=position,
+            total=total,
+        )
+        result["quality"] = quality
+        if quality["score"] > best_score:
+            best_result = result
+            best_score = quality["score"]
+        if quality["passed"]:
             return result
 
-    return _fallback_lesson_content(
+    if best_result and _has_lesson_content(best_result):
+        return _repair_lesson_content(
+            best_result,
+            subject=subject,
+            topic=topic,
+            lesson_title=lesson_title,
+            lesson_subject=lesson_subject,
+            include_mini_game=include_mini_game,
+            include_final_check=position == total,
+            position=position,
+            total=total,
+        )
+    fallback = _fallback_lesson_content(
         subject=subject,
         topic=topic,
         lesson_title=lesson_title,
         lesson_subject=lesson_subject,
         include_mini_game=include_mini_game,
+        include_final_check=position == total,
     )
+    fallback["quality"] = score_lesson_quality(fallback, subject=subject, topic=topic, position=position, total=total)
+    return fallback
 
 
 def _parse_json_object(raw: str) -> dict:
@@ -532,12 +649,40 @@ def _normalize_lesson_content(result: dict) -> dict:
     body = result.get("body")
     key_terms = result.get("key_terms")
     exercises = result.get("exercises")
-    return {
+    final_check = result.get("final_check")
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else None
+    normalized = {
         "hook": hook.strip() if isinstance(hook, str) else "",
         "body": body.strip() if isinstance(body, str) else "",
         "key_terms": key_terms if isinstance(key_terms, list) else [],
         "exercises": exercises if isinstance(exercises, list) else [],
         "mini_game": result.get("mini_game") if isinstance(result, dict) else None,
+        "final_check": final_check if isinstance(final_check, dict) else None,
+    }
+    if quality:
+        normalized["quality"] = quality
+    return normalized
+
+
+def _normalize_course_result(result: dict, subject: str, topic: str) -> dict:
+    title = result.get("title")
+    lessons = result.get("lessons")
+    normalized_lessons = []
+    if isinstance(lessons, list):
+        for lesson in lessons:
+            if isinstance(lesson, dict):
+                normalized_lessons.append(_normalize_lesson_content({
+                    **lesson,
+                    "hook": lesson.get("hook") or "",
+                    "body": lesson.get("body") or "",
+                    "key_terms": lesson.get("key_terms") or [],
+                    "exercises": lesson.get("exercises") or [],
+                    "mini_game": lesson.get("mini_game"),
+                    "final_check": lesson.get("final_check"),
+                }) | {"title": str(lesson.get("title") or "Lecție scurtă").strip()})
+    return {
+        "title": title.strip() if isinstance(title, str) and title.strip() else f"{topic} — {subject}",
+        "lessons": normalized_lessons,
     }
 
 
@@ -552,12 +697,205 @@ def _has_lesson_content(result: dict) -> bool:
     )
 
 
+def _contains_generic_filler(text: str) -> bool:
+    lowered = text.lower()
+    return any(re.search(pattern, lowered) for pattern in _GENERIC_FILLER_PATTERNS)
+
+
+def _valid_exercise(exercise: dict) -> bool:
+    if not isinstance(exercise, dict):
+        return False
+    prompt = exercise.get("prompt")
+    if not isinstance(prompt, str) or len(prompt.strip()) < 12:
+        return False
+    ex_type = exercise.get("type")
+    if ex_type == "fill":
+        return isinstance(exercise.get("blanks"), list) and bool(exercise["blanks"]) and isinstance(exercise.get("hint"), str)
+    if ex_type == "choice":
+        return (
+            isinstance(exercise.get("options"), list)
+            and len(exercise["options"]) >= 3
+            and isinstance(exercise.get("answer"), int)
+        )
+    if ex_type == "code":
+        return isinstance(exercise.get("expected"), str) and bool(exercise["expected"].strip()) and isinstance(exercise.get("hint"), str)
+    if ex_type == "match":
+        return isinstance(exercise.get("pairs"), list) and len(exercise["pairs"]) >= 2
+    return False
+
+
+def score_lesson_quality(
+    lesson: dict,
+    subject: str,
+    topic: str,
+    position: int,
+    total: int,
+) -> dict:
+    issues: list[str] = []
+    score = 0
+    body = lesson.get("body", "")
+    hook = lesson.get("hook", "")
+    exercises = lesson.get("exercises", [])
+    final_check = lesson.get("final_check")
+
+    if isinstance(hook, str) and 8 <= len(hook.strip()) <= 140:
+        score += 10
+    else:
+        issues.append("missing_hook")
+
+    if isinstance(body, str) and len(body.strip()) >= 240:
+        score += 25
+    elif isinstance(body, str) and len(body.strip()) >= 80:
+        score += 15
+    else:
+        issues.append("body_too_short")
+
+    if isinstance(body, str) and topic.lower().split()[0] in body.lower():
+        score += 8
+    else:
+        issues.append("topic_not_visible")
+
+    if isinstance(body, str) and not _contains_generic_filler(body):
+        score += 12
+    else:
+        issues.append("generic_filler")
+
+    valid_exercises = [ex for ex in exercises if _valid_exercise(ex)]
+    if valid_exercises:
+        score += 20
+    else:
+        issues.append("missing_valid_exercise")
+
+    if subject == "Programare":
+        if "```" in body and any(ex.get("type") == "code" for ex in valid_exercises):
+            score += 10
+        else:
+            issues.append("programming_needs_code")
+    elif subject == "Limbă străină":
+        if any(marker in body for marker in ("[", "dialog", "replic", "fraz")):
+            score += 10
+        else:
+            issues.append("language_needs_phrase_context")
+    elif subject == "Matematică":
+        if any(marker in body for marker in ("=", "+", "-", "×", "/", "pas")):
+            score += 10
+        else:
+            issues.append("math_needs_steps")
+    else:
+        if any(word in body.lower() for word in ("exemplu", "situație", "scenariu", "caz real")):
+            score += 10
+        else:
+            issues.append("general_needs_scenario")
+
+    if position == total:
+        criteria = final_check.get("success_criteria") if isinstance(final_check, dict) else None
+        if isinstance(final_check, dict) and isinstance(criteria, list) and len(criteria) >= 2:
+            score += 15
+        else:
+            issues.append("missing_final_check")
+    else:
+        score += 5
+
+    fatal_issues = {
+        "body_too_short",
+        "missing_valid_exercise",
+        "programming_needs_code",
+        "language_needs_phrase_context",
+        "math_needs_steps",
+        "general_needs_scenario",
+        "missing_final_check",
+    }
+    return {
+        "score": min(score, 100),
+        "passed": score >= 75 and not fatal_issues & set(issues),
+        "issues": issues,
+    }
+
+
+def score_course_quality(result: dict, subject: str, topic: str, level: int) -> dict:
+    lessons = result.get("lessons") if isinstance(result, dict) else []
+    issues: list[str] = []
+    if not isinstance(lessons, list) or len(lessons) < 4:
+        return {"score": 0, "passed": False, "issues": ["not_enough_lessons"]}
+
+    lesson_scores = [
+        score_lesson_quality(lesson, subject=subject, topic=topic, position=i + 1, total=len(lessons))
+        for i, lesson in enumerate(lessons)
+    ]
+    avg = sum(item["score"] for item in lesson_scores) // len(lesson_scores)
+    if avg < 75:
+        issues.append("lesson_average_too_low")
+    if not any(lesson.get("mini_game") for lesson in lessons):
+        issues.append("missing_mini_game")
+    if not isinstance(lessons[-1].get("final_check"), dict):
+        issues.append("missing_course_final_check")
+    if len({str(lesson.get("title", "")).strip().lower() for lesson in lessons}) < len(lessons):
+        issues.append("duplicate_titles")
+    return {
+        "score": max(0, min(100, avg - len(issues) * 5)),
+        "passed": avg >= 75 and not issues,
+        "issues": issues,
+        "lessons": lesson_scores,
+        "level": level,
+    }
+
+
+def _repair_lesson_content(
+    lesson: dict,
+    subject: str,
+    topic: str,
+    lesson_title: str,
+    lesson_subject: str,
+    include_mini_game: bool,
+    include_final_check: bool,
+    position: int,
+    total: int,
+) -> dict:
+    quality = score_lesson_quality(
+        lesson,
+        subject=subject,
+        topic=topic,
+        position=position,
+        total=total,
+    )
+    if quality["passed"]:
+        lesson["quality"] = quality
+        return lesson
+
+    fallback = _fallback_lesson_content(
+        subject=subject,
+        topic=topic,
+        lesson_title=lesson_title,
+        lesson_subject=lesson_subject,
+        include_mini_game=include_mini_game,
+        include_final_check=include_final_check,
+    )
+    repaired = {
+        **lesson,
+        "hook": lesson.get("hook") if len(str(lesson.get("hook") or "").strip()) >= 8 else fallback["hook"],
+        "body": lesson.get("body") if len(str(lesson.get("body") or "").strip()) >= 240 and not _contains_generic_filler(str(lesson.get("body") or "")) else fallback["body"],
+        "key_terms": lesson.get("key_terms") or fallback["key_terms"],
+        "exercises": lesson.get("exercises") if "missing_valid_exercise" not in quality["issues"] and "programming_needs_code" not in quality["issues"] else fallback["exercises"],
+        "mini_game": lesson.get("mini_game") or fallback["mini_game"],
+        "final_check": lesson.get("final_check") or fallback["final_check"],
+    }
+    repaired["quality"] = score_lesson_quality(
+        repaired,
+        subject=subject,
+        topic=topic,
+        position=position,
+        total=total,
+    )
+    return repaired
+
+
 def _fallback_lesson_content(
     subject: str,
     topic: str,
     lesson_title: str,
     lesson_subject: str,
     include_mini_game: bool,
+    include_final_check: bool = False,
 ) -> dict:
     if subject == "Programare":
         body = (
@@ -588,6 +926,15 @@ def _fallback_lesson_content(
             "buggy_index": 2,
             "fix": "console.log(nume);",
         } if include_mini_game else None
+        final_check = {
+            "type": "project",
+            "prompt": "Construiește un mini-exemplu care creează o valoare, o schimbă și o afișează.",
+            "success_criteria": [
+                "folosește o variabilă",
+                "afișează rezultatul",
+                "codul are maxim 5 linii",
+            ],
+        } if include_final_check else None
     else:
         body = (
             f"{lesson_title} înseamnă să iei {lesson_subject} și să-l folosești "
@@ -606,7 +953,26 @@ def _fallback_lesson_content(
             "blanks": ["exemplu"],
             "hint": "Cuvântul apare în lecție de mai multe ori.",
         }
-        game = None
+        game = {
+            "type": "output_predict",
+            "prompt": f"Ce răspuns arată că ai aplicat {topic}, nu doar ai memorat?",
+            "code": f"Situație: explici {topic} unui prieten printr-un exemplu concret.",
+            "options": [
+                "Dau un exemplu verificabil și explic pasul-cheie.",
+                "Spun că subiectul este important.",
+                "Copiez definiția fără context.",
+            ],
+            "answer": 0,
+        } if include_mini_game else None
+        final_check = {
+            "type": "quiz",
+            "prompt": f"Aplică {topic} într-un exemplu propriu și explică de ce funcționează.",
+            "success_criteria": [
+                "are un exemplu concret",
+                "folosește ideea principală",
+                "poate fi verificat de altcineva",
+            ],
+        } if include_final_check else None
 
     return {
         "hook": "Înveți mai repede când vezi imediat ce poți face cu ideea.",
@@ -614,6 +980,7 @@ def _fallback_lesson_content(
         "key_terms": [topic, lesson_subject, "exemplu"],
         "exercises": [exercise],
         "mini_game": game,
+        "final_check": final_check,
     }
 
 
@@ -665,7 +1032,87 @@ async def generate_mini_test(
         }
     result.setdefault("title", f"Mini-test: {topic}")
     result.setdefault("questions", [])
+    if len(result["questions"]) < 5:
+        result["questions"] = _fallback_mini_test_questions(subject, topic)
     return result
+
+
+def _fallback_mini_test_questions(subject: str, topic: str) -> list[dict]:
+    if subject == "Programare":
+        return [
+            {
+                "type": "choice",
+                "prompt": "Ce dovedește că ai înțeles exemplul de cod?",
+                "options": ["Îl poți modifica și rula", "Îl reciți pe de rost", "Îi schimbi fontul", "Îl pui într-un titlu"],
+                "answer": 0,
+                "explanation": "Codul înțeles poate fi schimbat fără să se rupă.",
+            },
+            {
+                "type": "choice",
+                "prompt": "Când folosești un exemplu scurt?",
+                "options": ["Înainte de teoria mare", "După 30 definiții", "Doar la final", "Niciodată"],
+                "answer": 0,
+                "explanation": "Exemplul scurt creează aha-moment rapid.",
+            },
+            {
+                "type": "choice",
+                "prompt": "Ce trebuie să aibă un exercițiu code bun?",
+                "options": ["Expected output/cod", "Doar o poveste", "Patru metafore", "Zero hint"],
+                "answer": 0,
+                "explanation": "Feedback-ul are nevoie de un rezultat verificabil.",
+            },
+            {
+                "type": "choice",
+                "prompt": "Care e semnul unui bug simplu?",
+                "options": ["O linie nu respectă modelul", "Tot codul e perfect", "Nu există input", "Tema e prea scurtă"],
+                "answer": 0,
+                "explanation": "Bug hunter verifică diferența dintre model și abatere.",
+            },
+            {
+                "type": "choice",
+                "prompt": "Finalul bun pentru coding este…",
+                "options": ["un mini-proiect runnable", "un eseu lung", "un citat", "o listă fără task"],
+                "answer": 0,
+                "explanation": "Rezultatul trebuie demonstrat.",
+            },
+        ]
+    return [
+        {
+            "type": "choice",
+            "prompt": f"Ce arată că ai înțeles {topic}?",
+            "options": ["Îl aplic într-un exemplu propriu", "Repet o definiție generică", "Spun că e important", "Sar peste practică"],
+            "answer": 0,
+            "explanation": "Înțelegerea apare când poți aplica ideea.",
+        },
+        {
+            "type": "choice",
+            "prompt": "Ce face un model mental bun?",
+            "options": ["Simplifică prima decizie", "Adaugă jargon", "Lungește lecția", "Ascunde exemplul"],
+            "answer": 0,
+            "explanation": "Modelul mental reduce încărcarea cognitivă.",
+        },
+        {
+            "type": "choice",
+            "prompt": "De ce folosim scenarii reale?",
+            "options": ["Ca userul să testeze ideea", "Ca textul să pară lung", "Ca să evităm feedback", "Ca să ascundem outcome-ul"],
+            "answer": 0,
+            "explanation": "Scenariul real face răspunsul verificabil.",
+        },
+        {
+            "type": "choice",
+            "prompt": "Care task e cel mai bun?",
+            "options": ["Aplică ideea în 60 secunde", "Citește 5 pagini", "Memorează tot", "Așteaptă următoarea lecție"],
+            "answer": 0,
+            "explanation": "Micro-acțiunea creează primul win.",
+        },
+        {
+            "type": "choice",
+            "prompt": "Un final check bun are…",
+            "options": ["criterii de succes clare", "doar felicitări", "zero context", "o definiție vagă"],
+            "answer": 0,
+            "explanation": "Criteriile clare arată dacă rezultatul chiar există.",
+        },
+    ]
 
 
 # ═══════════════════════════════════════════════════════════
