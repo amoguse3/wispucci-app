@@ -203,6 +203,7 @@ async def build_lesson(
         exercises_raw = les_data.get("exercises", [])
         mini_game = les_data.get("mini_game") or None
         key_terms = les_data.get("key_terms") or []
+        cards = les_data.get("cards") or []
         hook = les_data.get("hook") or ""
 
         lesson = Lesson(
@@ -214,6 +215,7 @@ async def build_lesson(
                 "type": "mixed",
                 "hook": hook,
                 "key_terms": key_terms,
+                "cards": cards,
                 "exercises": exercises_raw,
                 "mini_game": mini_game,
                 "final_check": les_data.get("final_check"),
@@ -409,6 +411,7 @@ async def generate_lesson(
         "type": "mixed",
         "hook": content.get("hook", ""),
         "key_terms": content.get("key_terms", []),
+        "cards": content.get("cards", []),
         "exercises": content.get("exercises", []),
         "mini_game": content.get("mini_game"),
         "final_check": content.get("final_check"),
