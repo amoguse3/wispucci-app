@@ -115,6 +115,11 @@ const api = {
   leaderboard: (period = 'weekly') => apiFetch(`/api/leaderboard/${period}`),
   saveSettings: (settings) =>
     apiFetch('/api/me/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+  programmerProfile: () => apiFetch('/api/me/programmer-profile'),
+  nextSuggestion: (moduleId) => {
+    const qs = moduleId ? `?module_id=${encodeURIComponent(moduleId)}` : '';
+    return apiFetch(`/api/me/programmer-profile/next-suggestion${qs}`);
+  },
 };
 
 // =========================================================
@@ -156,6 +161,12 @@ const state = {
   leaderboardPeriod: 'weekly',
   statsCache: null,
   pendingGenerationAfterSignup: false,
+  // Cards-stage navigation. Reset every time we apply a new lesson so
+  // the deck always starts at card 1, front side.
+  cardsState: { idx: 0, flipped: false, cards: [] },
+  // Cached next-course suggestion for the celebrate overlay (populated
+  // when the module finishes; cleared on closeCelebrate).
+  nextSuggestion: null,
 };
 
 // =========================================================
@@ -1087,6 +1098,12 @@ function applyLessonToView(lesson) {
     } // closes else of practice._loading
   }
 
+  // ── cards pane (3-5 flashcards generated alongside the lesson body)
+  const cardsList = Array.isArray(practice.cards) ? practice.cards : [];
+  state.cardsState = { idx: 0, flipped: false, cards: cardsList };
+  _renderCardsState();
+  _bindCardsHandlers();
+
   // Re-bind nextStep / prevStep handlers because we replaced the DOM nodes.
   _bindLessonStepButtons();
 
@@ -1135,13 +1152,41 @@ function _bindLessonStepButtons() {
 // stage advances to the next lesson (and bumps module progress 25%).
 // Pasul anterior on the first stage rewinds to the previous lesson's
 // last available stage. Note tab is always reachable, doesn't gate flow.
+// Stable per-lesson hash so the 50/50 endgame pick stays consistent
+// across refreshes (otherwise the same lesson would flip-flop between
+// cards and practice on every render).
+function _hashStr(s) {
+  let h = 0;
+  const str = String(s || '');
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h) + str.charCodeAt(i);
+    h |= 0;
+  }
+  return Math.abs(h);
+}
+function _lessonHasCards(lesson) {
+  return !!(lesson && lesson.practice
+    && Array.isArray(lesson.practice.cards)
+    && lesson.practice.cards.length >= 2);
+}
 function _lessonStages(lesson) {
   const stages = ['theory'];
   const hasPractice = lesson && lesson.practice
     && Array.isArray(lesson.practice.exercises)
     && lesson.practice.exercises.length > 0;
+  const hasCards = _lessonHasCards(lesson);
   const hasGame = lesson && lesson.practice && lesson.practice.mini_game;
-  if (hasPractice) stages.push('practice');
+  // 50/50 endgame: when both cards and practice are available the user
+  // gets ONE of them (deterministic per lesson id). When only one is
+  // available, fall through to it. Game (if any) always plays last.
+  if (hasCards && hasPractice) {
+    const pick = (_hashStr(lesson && lesson.id) % 2 === 0) ? 'cards' : 'practice';
+    stages.push(pick);
+  } else if (hasCards) {
+    stages.push('cards');
+  } else if (hasPractice) {
+    stages.push('practice');
+  }
   if (hasGame) stages.push('game');
   return stages;
 }
@@ -1191,6 +1236,8 @@ function _refreshStepButtonLabels() {
       next.textContent = 'Lecția următoare →';
     } else if (stages[sIdx + 1] === 'practice') {
       next.textContent = 'Treci la exercițiu →';
+    } else if (stages[sIdx + 1] === 'cards') {
+      next.textContent = 'Treci la repetiție →';
     } else if (stages[sIdx + 1] === 'game') {
       next.textContent = 'Treci la joc →';
     } else {
@@ -1441,6 +1488,90 @@ function _bindPracticeHandlers(ex) {
       }
     }
   });
+}
+
+// =========================================================
+// FLASHCARDS — endgame stage (50/50 vs practice).
+// =========================================================
+// Render the current cards state into the DOM. Same nodes are reused
+// across lessons so we just patch text + flipped class.
+function _renderCardsState() {
+  const card = $('.view-lesson .lesson-card');
+  if (!card) return;
+  const cs = state.cardsState || { idx: 0, flipped: false, cards: [] };
+  const front = card.querySelector('[data-cards-front]');
+  const back = card.querySelector('[data-cards-back]');
+  const flip = card.querySelector('[data-cards-flip]');
+  const idxEl = card.querySelector('[data-cards-idx]');
+  const totalEl = card.querySelector('[data-cards-total]');
+  const prevBtn = $('#cardsPrevBtn');
+  const nextBtn = $('#cardsNextBtn');
+  const flipBtn = $('#cardsFlipBtn');
+  const total = Array.isArray(cs.cards) ? cs.cards.length : 0;
+  const cur = (total > 0) ? (cs.cards[cs.idx] || { front: '—', back: '—' }) : { front: '—', back: '—' };
+  if (front) front.textContent = String(cur.front || '—');
+  if (back)  back.innerHTML = _escapeWithInlineCode(cur.back || '—');
+  if (flip)  flip.classList.toggle('is-flipped', !!cs.flipped);
+  if (idxEl) idxEl.textContent = String(total ? cs.idx + 1 : 0);
+  if (totalEl) totalEl.textContent = String(total);
+  if (prevBtn) prevBtn.disabled = cs.idx <= 0;
+  const isLast = cs.idx >= Math.max(0, total - 1);
+  if (nextBtn) nextBtn.textContent = isLast ? 'Pas următor →' : 'Cardul următor →';
+  if (flipBtn) flipBtn.textContent = cs.flipped ? 'Întoarce înapoi' : 'Întoarce';
+}
+
+// Bind cards interactions once. Buttons + flip card live inside the
+// static markup, so dataset.bound guards prevent double-binding when
+// applyLessonToView re-runs.
+function _bindCardsHandlers() {
+  const flipBtn = $('#cardsFlipBtn');
+  const prevBtn = $('#cardsPrevBtn');
+  const nextBtn = $('#cardsNextBtn');
+  const flipCard = document.querySelector('.view-lesson [data-cards-flip]');
+  const flipToggle = () => {
+    const cs = state.cardsState; if (!cs) return;
+    cs.flipped = !cs.flipped;
+    _renderCardsState();
+  };
+  if (flipBtn && !flipBtn.dataset.bound) {
+    flipBtn.dataset.bound = '1';
+    flipBtn.addEventListener('click', flipToggle);
+  }
+  if (flipCard && !flipCard.dataset.bound) {
+    flipCard.dataset.bound = '1';
+    flipCard.addEventListener('click', flipToggle);
+  }
+  if (prevBtn && !prevBtn.dataset.bound) {
+    prevBtn.dataset.bound = '1';
+    prevBtn.addEventListener('click', () => {
+      const cs = state.cardsState; if (!cs) return;
+      if (cs.idx > 0) {
+        cs.idx -= 1; cs.flipped = false; _renderCardsState();
+      }
+    });
+  }
+  if (nextBtn && !nextBtn.dataset.bound) {
+    nextBtn.dataset.bound = '1';
+    nextBtn.addEventListener('click', () => {
+      const cs = state.cardsState; if (!cs) return;
+      const total = Array.isArray(cs.cards) ? cs.cards.length : 0;
+      if (cs.idx < total - 1) {
+        cs.idx += 1; cs.flipped = false; _renderCardsState();
+        return;
+      }
+      // Last card → behave like the lesson-nav next button.
+      _onNextStepClick();
+    });
+  }
+}
+
+// Same XSS escape + ` → <code>` transform used by the theory pane,
+// so card backs can include short inline code samples.
+function _escapeWithInlineCode(s) {
+  return escapeHtml(String(s || '')).replace(
+    /`([^`]+)`/g,
+    (_m, x) => `<code>${x}</code>`
+  );
 }
 
 function norm(s) {
@@ -2006,6 +2137,37 @@ function celebrate() {
   _orbBoomTimer = setTimeout(() => { _orbBoomTimer = null; orbBoom(); }, 620);
   if (celebrateFx) celebrateFx.stop();
   celebrateFx = startCelebrateFx($('#celebrateFx'));
+  // Fetch the "next course" recommendation in parallel with the boom
+  // animation. We hide it by default and only un-hide once a topic
+  // arrives — keeps the celebrate card layout stable when the API
+  // is slow or unavailable.
+  _renderNextSuggestionInCelebrate();
+}
+
+async function _renderNextSuggestionInCelebrate() {
+  const wrap = document.querySelector('#celebrate [data-next-suggest]');
+  if (!wrap) return;
+  wrap.hidden = true;
+  state.nextSuggestion = null;
+  const moduleId = state.generatedModule && state.generatedModule.module_id
+    ? state.generatedModule.module_id : null;
+  let sug;
+  try {
+    sug = await api.nextSuggestion(moduleId);
+  } catch (_err) {
+    return;
+  }
+  if (!sug || !sug.topic) return;
+  state.nextSuggestion = sug;
+  const titleEl = wrap.querySelector('[data-next-suggest-title]');
+  const whyEl = wrap.querySelector('[data-next-suggest-why]');
+  const skillEl = wrap.querySelector('[data-next-suggest-skill]');
+  const lvlEl = wrap.querySelector('[data-next-suggest-level]');
+  if (titleEl) titleEl.innerHTML = `<em>${escapeHtml(sug.topic)}</em>`;
+  if (whyEl) whyEl.textContent = sug.why || '';
+  if (skillEl) skillEl.textContent = sug.skill || '';
+  if (lvlEl) lvlEl.textContent = sug.level ? `nivel ${sug.level}` : '';
+  wrap.hidden = false;
 }
 
 $('#celebrateClose')?.addEventListener('click', closeCelebrate);
@@ -2015,6 +2177,32 @@ function closeCelebrate() {
   const overlay = $('#celebrate');
   if (_orbBoomTimer) { clearTimeout(_orbBoomTimer); _orbBoomTimer = null; }
   if (celebrateFx) { celebrateFx.stop(); celebrateFx = null; }
+  // Hide the next-suggest block so the next celebration starts clean.
+  const ns = overlay && overlay.querySelector('[data-next-suggest]');
+  if (ns) ns.hidden = true;
+  // If we have a fresh suggestion, prefill the course-intent form so
+  // tapping "Next" immediately lands the user inside the funnel for the
+  // recommended advanced topic — turns celebration into a re-engagement
+  // hook instead of a dead end.
+  const sug = state.nextSuggestion;
+  if (sug && sug.topic) {
+    // Prefill the course-intent funnel so tapping into "course" lands
+    // the user in the recommended advanced topic. The form lives on
+    // the home/onboarding screens — it's a single text input + a
+    // segmented level picker. We patch state first (authoritative)
+    // and then sync the UI if those nodes are mounted.
+    state.topic = sug.topic;
+    state.subject = sug.skill ? inferSubjectFromTopic(sug.topic) : (state.subject || 'Programare');
+    if (sug.level) state.level = parseInt(sug.level, 10) || state.level;
+    const topicInp = document.querySelector('#courseIntentInput');
+    if (topicInp) topicInp.value = sug.topic;
+    const lvlBtns = document.querySelectorAll('[data-level]');
+    if (lvlBtns && lvlBtns.length && sug.level != null) {
+      const want = String(parseInt(sug.level, 10) || 0);
+      lvlBtns.forEach(b => b.classList.toggle('is-on', b.dataset.level === want));
+    }
+    state.nextSuggestion = null;
+  }
   // After celebrating module completion, the user shouldn't land back
   // inside a 100%-completed lesson (clicking Next there does nothing).
   // Reset progress + return to home so they can start a new course or
@@ -2194,6 +2382,103 @@ async function renderStats() {
 
   // Leaderboard
   await renderLeaderboard(state.leaderboardPeriod);
+
+  // Programmer profile (only when the user has any programming progress;
+  // we keep the section hidden by default so the page stays clean for
+  // language/math/etc. learners).
+  await renderProgrammerProfile();
+}
+
+// Render the programmer profile section inside #view-stats. Hides the
+// whole section if the backend reports zero programming progress so we
+// never show "0 lecții terminate" to non-programmer users.
+async function renderProgrammerProfile() {
+  const section = document.querySelector('[data-programmer-section]');
+  if (!section) return;
+  let prof;
+  try {
+    prof = await api.programmerProfile();
+  } catch (_err) {
+    section.hidden = true;
+    return;
+  }
+  if (!prof || (prof.lessons_completed | 0) <= 0) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+
+  const tierEl = section.querySelector('[data-programmer-tier]');
+  const fillEl = section.querySelector('[data-programmer-strength-fill]');
+  const subStr = section.querySelector('[data-programmer-strength-sub]');
+  const lessonsEl = section.querySelector('[data-programmer-lessons]');
+  const modulesEl = section.querySelector('[data-programmer-modules]');
+  const conceptsEl = section.querySelector('[data-programmer-concepts]');
+  const xpEl = section.querySelector('[data-programmer-xp]');
+  const pctNumEl = section.querySelector('[data-programmer-percentile-num]');
+  const reachedEl = section.querySelector('[data-programmer-reached]');
+  const pctMetaEl = section.querySelector('[data-programmer-percentile]');
+
+  const score = Math.max(0, Math.round(prof.strength_score || 0));
+  // Clamp the bar to 100% — score has no theoretical max so we map it
+  // through tanh-ish saturation so even high scorers see a moving bar
+  // without pinning at 100% forever.
+  const barPct = Math.min(100, Math.round(100 * (1 - Math.exp(-score / 240))));
+  if (tierEl) tierEl.textContent = prof.strength_tier || 'începător';
+  if (fillEl) fillEl.style.width = `${barPct}%`;
+  if (subStr) subStr.textContent = `scor ${score}`;
+  if (lessonsEl) lessonsEl.textContent = String(prof.lessons_completed | 0);
+  if (modulesEl) modulesEl.textContent = `${prof.modules_completed | 0} module`;
+  if (conceptsEl) conceptsEl.textContent = String(prof.concepts_total | 0);
+  if (xpEl) xpEl.textContent = `${prof.xp_total | 0} XP total`;
+
+  const pct = Math.max(0, Math.min(100, Math.round(prof.peer_percentile || 0)));
+  const reached = Math.max(0, Math.min(100, Math.round(prof.reached_current_level_pct || 0)));
+  if (pctNumEl) pctNumEl.textContent = `top ${Math.max(1, 100 - pct)}%`;
+  if (reachedEl) reachedEl.textContent = `${reached}% au ajuns la nivelul tău`;
+  if (pctMetaEl) {
+    pctMetaEl.textContent = pct >= 50
+      ? `ești peste ${pct}% dintre programatori`
+      : `aproape de ${pct}% dintre programatori`;
+  }
+
+  // Topics & algorithms learned.
+  const algos = Array.isArray(prof.top_algorithms) ? prof.top_algorithms : [];
+  const algosWrap = section.querySelector('[data-programmer-algos]');
+  const algosList = section.querySelector('[data-programmer-algos-list]');
+  if (algosWrap && algosList) {
+    if (!algos.length) {
+      algosWrap.hidden = true;
+      algosList.innerHTML = '';
+    } else {
+      algosWrap.hidden = false;
+      algosList.innerHTML = algos
+        .slice(0, 24)
+        .map(a => `<span class="programmer-algo-pill">${escapeHtml(String(a))}</span>`)
+        .join('');
+    }
+  }
+
+  // Next-step suggestion. Pulled lazily so we don't block stats render
+  // when the suggestion endpoint is slow or rate-limited.
+  const nextWrap = section.querySelector('[data-programmer-next]');
+  if (!nextWrap) return;
+  nextWrap.hidden = true;
+  try {
+    const sug = await api.nextSuggestion();
+    if (!sug || !sug.topic) return;
+    const titleEl = section.querySelector('[data-programmer-next-title]');
+    const whyEl = section.querySelector('[data-programmer-next-why]');
+    const skillEl = section.querySelector('[data-programmer-next-skill]');
+    const lvlEl = section.querySelector('[data-programmer-next-level]');
+    if (titleEl) titleEl.innerHTML = `<em>${escapeHtml(sug.topic)}</em>`;
+    if (whyEl) whyEl.textContent = sug.why || '';
+    if (skillEl) skillEl.textContent = sug.skill || '';
+    if (lvlEl) lvlEl.textContent = sug.level ? `nivel ${sug.level}` : '';
+    nextWrap.hidden = false;
+  } catch (_err) {
+    // silent — section without next-step is still useful
+  }
 }
 
 async function renderLeaderboard(period = 'weekly') {

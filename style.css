@@ -3608,3 +3608,285 @@ body.force-focus .aurora-layer { filter: blur(20px) opacity(.5); }
   font-size: 13px;
   font-style: italic;
 }
+
+/* ===========================================================================
+   FLASHCARDS — 50/50 endgame stage (theory → cards | practice → game)
+=========================================================================== */
+.cards-deck {
+  width: 100%;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  margin: var(--s-4) 0 var(--s-3);
+  perspective: 1200px;
+  min-height: 220px;
+}
+.card-flip {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  min-height: 220px;
+  cursor: pointer;
+  transform-style: preserve-3d;
+}
+.card-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  transform-style: preserve-3d;
+  transition: transform .55s cubic-bezier(.2,.8,.25,1);
+}
+.card-flip.is-flipped .card-flip-inner {
+  transform: rotateY(180deg);
+}
+.card-flip-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-5) var(--s-5);
+  border-radius: var(--r-4);
+  background: rgba(var(--bg-card-rgb), .92);
+  border: 1px solid rgba(var(--accent-rgb), .22);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(var(--accent-rgb), .06);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  text-align: center;
+  font-size: 22px;
+  line-height: 1.35;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  color: var(--accent-soft);
+  word-break: break-word;
+}
+.card-flip-front {
+  background:
+    radial-gradient(circle at 30% 0%, rgba(var(--accent-rgb), .12), transparent 50%),
+    rgba(var(--bg-card-rgb), .92);
+}
+.card-flip-back {
+  transform: rotateY(180deg);
+  background:
+    radial-gradient(circle at 30% 0%, rgba(var(--plasma-rgb), .14), transparent 55%),
+    rgba(var(--bg-card-rgb), .92);
+  border-color: rgba(var(--plasma-rgb), .35);
+  font-family: 'Inter', sans-serif;
+  font-style: normal;
+  font-size: 16px;
+  color: var(--text);
+  line-height: 1.55;
+  padding: var(--s-5) var(--s-6);
+}
+.card-flip-back code {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent);
+  background: rgba(0,0,0,.3);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.cards-foot {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: var(--s-3);
+}
+.cards-meta {
+  margin-top: var(--s-2);
+  text-align: center;
+  letter-spacing: .04em;
+}
+
+/* ===========================================================================
+   PROGRAMMER PROFILE — stats subsection
+=========================================================================== */
+.programmer-section[hidden] { display: none !important; }
+
+.programmer-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+.programmer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--s-4);
+  background: rgba(var(--bg-card-rgb), .6);
+  border: 1px solid rgba(var(--accent-rgb), .15);
+  border-radius: var(--r-3);
+}
+.programmer-card-strength {
+  border-color: rgba(var(--plasma-rgb), .30);
+  background:
+    linear-gradient(180deg, rgba(var(--plasma-rgb), .08), transparent 70%),
+    rgba(var(--bg-card-rgb), .6);
+}
+.programmer-card-rank {
+  border-color: rgba(var(--accent-rgb), .35);
+}
+.programmer-kicker {
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.programmer-tier {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 28px;
+  color: var(--accent-soft);
+  line-height: 1.1;
+}
+.programmer-num {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: -.01em;
+}
+.programmer-sub {
+  font-size: 13px;
+}
+.programmer-strength-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(var(--plasma-rgb), .15);
+  overflow: hidden;
+}
+.programmer-strength-bar > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--plasma) 0%, var(--accent) 100%);
+  border-radius: 999px;
+  transition: width .6s cubic-bezier(.2,.8,.25,1);
+}
+
+.programmer-algos {
+  margin-top: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.programmer-algos[hidden] { display: none !important; }
+.programmer-algos-label {
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.programmer-algos-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.programmer-algo-pill {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), .08);
+  border: 1px solid rgba(var(--accent-rgb), .25);
+  color: var(--accent-soft);
+}
+
+.programmer-next {
+  margin-top: var(--s-4);
+  padding: var(--s-4);
+  border-radius: var(--r-3);
+  background:
+    linear-gradient(180deg, rgba(var(--plasma-rgb), .10), transparent 80%),
+    rgba(var(--bg-card-rgb), .6);
+  border: 1px solid rgba(var(--plasma-rgb), .35);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.programmer-next[hidden] { display: none !important; }
+
+/* ===========================================================================
+   NEXT-COURSE SUGGESTION — celebration overlay + programmer profile
+=========================================================================== */
+.next-suggest {
+  width: 100%;
+  margin-top: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-3);
+  background:
+    linear-gradient(180deg, rgba(var(--plasma-rgb), .12), transparent 80%),
+    rgba(var(--bg-deep-rgb), .55);
+  border: 1px solid rgba(var(--plasma-rgb), .40);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.next-suggest[hidden] { display: none !important; }
+
+.next-suggest-kicker {
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--plasma-soft);
+}
+.next-suggest-title {
+  font-family: 'Inter', sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -.01em;
+}
+.next-suggest-title em {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--accent-soft);
+}
+.next-suggest-why {
+  margin: 0;
+}
+.next-suggest-meta {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.next-suggest-skill,
+.next-suggest-level {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), .08);
+  border: 1px solid rgba(var(--accent-rgb), .22);
+  color: var(--accent-soft);
+  text-transform: lowercase;
+  letter-spacing: .03em;
+}
+.next-suggest-level {
+  background: rgba(var(--plasma-rgb), .12);
+  border-color: rgba(var(--plasma-rgb), .35);
+  color: var(--plasma-soft);
+}
+
+@media (max-width: 920px) {
+  .programmer-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .programmer-grid {
+    grid-template-columns: 1fr;
+  }
+  .card-flip {
+    min-height: 180px;
+  }
+  .card-flip-face {
+    font-size: 19px;
+    padding: var(--s-4);
+  }
+  .card-flip-back {
+    font-size: 15px;
+  }
+}

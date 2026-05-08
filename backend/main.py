@@ -14,6 +14,7 @@ from backend.routers import (
     events,
     leaderboard,
     lessons,
+    programmer,
     settings as settings_router,
     stats,
     streak,
@@ -64,6 +65,7 @@ app.include_router(streak.router, prefix="/api/me", tags=["Streak & XP"])
 app.include_router(events.router, prefix="/api", tags=["Events"])
 app.include_router(stats.router, prefix="/api", tags=["Stats"])
 app.include_router(leaderboard.router, prefix="/api", tags=["Leaderboard"])
+app.include_router(programmer.router, prefix="/api", tags=["Programmer"])
 
 
 @app.get("/api/health")

@@ -505,6 +505,28 @@
           <p class="muted">Exercițiul apare după ce lecția e gata.</p>
         </div>
 
+        <div class="tab-pane" data-pane="cards">
+          <!-- Populated by applyLessonToView() with the generated cards.
+               50/50 endgame stage: half the lessons see cards, half see
+               practice (deterministic per lesson id, so refresh stays stable). -->
+          <h3 class="lesson-title"><em>Repetiție</em> rapidă</h3>
+          <p class="lesson-meta muted">3 carduri scurte. Întoarce, citește, treci mai departe.</p>
+          <div class="cards-deck" id="cardsDeck">
+            <div class="card-flip" data-cards-flip>
+              <div class="card-flip-inner">
+                <div class="card-flip-face card-flip-front" data-cards-front>—</div>
+                <div class="card-flip-face card-flip-back" data-cards-back>—</div>
+              </div>
+            </div>
+          </div>
+          <div class="cards-foot">
+            <button class="btn-ghost" id="cardsPrevBtn" disabled>← Anterior</button>
+            <button class="btn-ghost" id="cardsFlipBtn">Întoarce</button>
+            <button class="btn btn-primary" id="cardsNextBtn">Cardul următor →</button>
+          </div>
+          <p class="cards-meta muted small"><span data-cards-idx>1</span> / <span data-cards-total>3</span></p>
+        </div>
+
         <div class="tab-pane" data-pane="notes">
           <h3 class="lesson-title"><em>Notele</em> tale</h3>
           <p class="lesson-body muted">Scrie cu mâna ta ce ai înțeles. Aceste note rămân ale tale.</p>
@@ -562,9 +584,20 @@
         <h3><em>Modul</em> terminat.</h3>
         <p class="lead" data-celebrate-xp>+0 XP <span class="muted">· streak <span data-celebrate-streak>0</span> zile</span></p>
         <p class="muted small" data-celebrate-next>Vino mâine pentru un modul nou.</p>
+        <!-- Next-course recommendation. Populated after celebrate() by
+             api.nextSuggestion(); hidden until we have a topic. -->
+        <div class="next-suggest" data-next-suggest hidden>
+          <span class="next-suggest-kicker">curs nou pentru tine</span>
+          <h4 class="next-suggest-title" data-next-suggest-title><em>—</em></h4>
+          <p class="next-suggest-why muted small" data-next-suggest-why></p>
+          <div class="next-suggest-meta">
+            <span class="next-suggest-skill" data-next-suggest-skill></span>
+            <span class="next-suggest-level" data-next-suggest-level></span>
+          </div>
+        </div>
         <div class="cta-row">
           <button class="btn-ghost" id="celebrateClose">Închide</button>
-          <button class="btn btn-primary" id="celebrateNext">Înapoi la home</button>
+          <button class="btn btn-primary" id="celebrateNext" data-next-suggest-cta>Înapoi la home</button>
         </div>
       </div>
     </div>
@@ -600,6 +633,55 @@
           <p class="lead page-lead">Tot ce ai învățat — indiferent că e cod, limbă sau matematică.</p>
         </div>
       </header>
+
+      <!-- Programmer profile (subject="Programare"). Only renders if the user
+           has any programming progress; otherwise stays hidden so the page
+           stays clean for language/math/etc. learners. -->
+      <section class="stats-section programmer-section" data-programmer-section hidden>
+        <header class="stats-section-head">
+          <h2 class="h2"><em>Profil</em> programator</h2>
+          <p class="muted small" data-programmer-percentile>doar tu vezi asta. cât de departe ai ajuns.</p>
+        </header>
+
+        <div class="programmer-grid" data-programmer-grid>
+          <div class="programmer-card programmer-card-strength">
+            <span class="programmer-kicker">putere</span>
+            <span class="programmer-tier" data-programmer-tier>—</span>
+            <div class="programmer-strength-bar"><i data-programmer-strength-fill style="width:0%"></i></div>
+            <span class="programmer-sub muted" data-programmer-strength-sub>scor 0</span>
+          </div>
+          <div class="programmer-card">
+            <span class="programmer-kicker">lecții terminate</span>
+            <span class="programmer-num" data-programmer-lessons>0</span>
+            <span class="programmer-sub muted" data-programmer-modules>0 module</span>
+          </div>
+          <div class="programmer-card">
+            <span class="programmer-kicker">concepte stăpânite</span>
+            <span class="programmer-num" data-programmer-concepts>0</span>
+            <span class="programmer-sub muted" data-programmer-xp>0 XP total</span>
+          </div>
+          <div class="programmer-card programmer-card-rank">
+            <span class="programmer-kicker">poziția ta</span>
+            <span class="programmer-num" data-programmer-percentile-num>—</span>
+            <span class="programmer-sub muted" data-programmer-reached>—</span>
+          </div>
+        </div>
+
+        <div class="programmer-algos" data-programmer-algos hidden>
+          <span class="programmer-algos-label muted small">topice & algoritmi învățați</span>
+          <div class="programmer-algos-list" data-programmer-algos-list></div>
+        </div>
+
+        <div class="programmer-next" data-programmer-next hidden>
+          <span class="next-suggest-kicker">următorul pas</span>
+          <h4 class="next-suggest-title" data-programmer-next-title><em>—</em></h4>
+          <p class="next-suggest-why muted small" data-programmer-next-why></p>
+          <div class="next-suggest-meta">
+            <span class="next-suggest-skill" data-programmer-next-skill></span>
+            <span class="next-suggest-level" data-programmer-next-level></span>
+          </div>
+        </div>
+      </section>
 
       <!-- Big stat row -->
       <section class="stats-row" id="statsRow">

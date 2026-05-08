@@ -497,12 +497,20 @@ Output STRICT JSON, fără text în afara JSON:
            reală, pas cu pas. Limbaj simplu (clasa a 8-a). NU 'evident'.
            Maxim 1 analogie din viața reală.",
   "key_terms": ["2-3 concepte cheie din body"],
+  "cards": [
+    {"front":"termen sau întrebare scurtă (max 6 cuvinte)",
+     "back":"răspuns/definiție concret (max 18 cuvinte). poți include `cod` inline."}
+  ],
   "exercises": [
     {"type":"fill","prompt":"...","blanks":["r1"],"hint":"..."}
   ],
   "mini_game": null,
   "final_check": null
 }
+
+cards: 3-5 obiecte. Fiecare card e UN concept din body, NU repetare. front =
+termen/întrebare scurtă; back = răspunsul concret. Folosit pentru repetiție
+spațiată după lecție. Conceptele DOAR din ce a fost prezentat în body.
 
 EXACT 1 exercițiu. Tipuri: fill | choice | code.
 - fill: completează un cuvânt/funcție din EXEMPLELE deja arătate în body.
@@ -648,6 +656,7 @@ def _normalize_lesson_content(result: dict) -> dict:
     hook = result.get("hook")
     body = result.get("body")
     key_terms = result.get("key_terms")
+    cards = result.get("cards")
     exercises = result.get("exercises")
     final_check = result.get("final_check")
     quality = result.get("quality") if isinstance(result.get("quality"), dict) else None
@@ -655,6 +664,7 @@ def _normalize_lesson_content(result: dict) -> dict:
         "hook": hook.strip() if isinstance(hook, str) else "",
         "body": body.strip() if isinstance(body, str) else "",
         "key_terms": key_terms if isinstance(key_terms, list) else [],
+        "cards": _normalize_cards(cards, key_terms if isinstance(key_terms, list) else []),
         "exercises": exercises if isinstance(exercises, list) else [],
         "mini_game": result.get("mini_game") if isinstance(result, dict) else None,
         "final_check": final_check if isinstance(final_check, dict) else None,
@@ -662,6 +672,39 @@ def _normalize_lesson_content(result: dict) -> dict:
     if quality:
         normalized["quality"] = quality
     return normalized
+
+
+def _normalize_cards(cards, key_terms_fallback) -> list[dict]:
+    """
+    Coerce cards to [{front, back}, ...]. Drops malformed entries and falls
+    back to key_terms (term -> term) when the model didn't return any cards
+    so the cards endgame stage always has at least 2-3 cards to show.
+    """
+    out: list[dict] = []
+    if isinstance(cards, list):
+        for c in cards:
+            if not isinstance(c, dict):
+                continue
+            front = c.get("front") or c.get("term") or c.get("q")
+            back = c.get("back") or c.get("definition") or c.get("a")
+            if not isinstance(front, str) or not isinstance(back, str):
+                continue
+            front = front.strip()
+            back = back.strip()
+            if not front or not back:
+                continue
+            out.append({"front": front[:120], "back": back[:280]})
+    if len(out) < 2 and isinstance(key_terms_fallback, list):
+        for term in key_terms_fallback:
+            if not isinstance(term, str) or not term.strip():
+                continue
+            front = term.strip()[:120]
+            if any(c["front"].lower() == front.lower() for c in out):
+                continue
+            out.append({"front": front, "back": f"concept-cheie din lecție · {front}"})
+            if len(out) >= 3:
+                break
+    return out[:6]
 
 
 def _normalize_course_result(result: dict, subject: str, topic: str) -> dict:
@@ -875,6 +918,7 @@ def _repair_lesson_content(
         "hook": lesson.get("hook") if len(str(lesson.get("hook") or "").strip()) >= 8 else fallback["hook"],
         "body": lesson.get("body") if len(str(lesson.get("body") or "").strip()) >= 240 and not _contains_generic_filler(str(lesson.get("body") or "")) else fallback["body"],
         "key_terms": lesson.get("key_terms") or fallback["key_terms"],
+        "cards": lesson.get("cards") if isinstance(lesson.get("cards"), list) and lesson.get("cards") else fallback["cards"],
         "exercises": lesson.get("exercises") if "missing_valid_exercise" not in quality["issues"] and "programming_needs_code" not in quality["issues"] else fallback["exercises"],
         "mini_game": lesson.get("mini_game") or fallback["mini_game"],
         "final_check": lesson.get("final_check") or fallback["final_check"],
@@ -974,10 +1018,24 @@ def _fallback_lesson_content(
             ],
         } if include_final_check else None
 
+    if subject == "Programare":
+        cards = [
+            {"front": "variabilă", "back": "etichetă pe o valoare; o folosești cu numele ei."},
+            {"front": "console.log", "back": "afișează o valoare ca să verifici ce se întâmplă."},
+            {"front": "const", "back": "variabilă care nu se schimbă după ce-i dai o valoare."},
+        ]
+    else:
+        cards = [
+            {"front": str(topic)[:40] or "ideea cursului", "back": f"o aplici prin un exemplu concret, nu prin definiție."},
+            {"front": str(lesson_subject)[:40] or "subiectul lecției", "back": "îl explici cuiva fără să copiezi textul."},
+            {"front": "exemplu", "back": "fragment scurt prin care arăți că ai înțeles ideea."},
+        ]
+
     return {
         "hook": "Înveți mai repede când vezi imediat ce poți face cu ideea.",
         "body": body,
         "key_terms": [topic, lesson_subject, "exemplu"],
+        "cards": cards,
         "exercises": [exercise],
         "mini_game": game,
         "final_check": final_check,
