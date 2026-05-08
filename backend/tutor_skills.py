@@ -160,28 +160,147 @@ async def _stream_ai(
 
 
 def _mock_response(user_prompt: str) -> str:
-    """Fallback when no API key is set."""
+    """
+    Local fallback when AI_API_KEY is missing. Returns realistic enough JSON for
+    the three call shapes (course, outline, single lesson) to flow through the
+    rest of the pipeline without flattening every module to the same 2 lessons.
+    Lesson count + topic are parsed out of the user prompt so distinct topics
+    look distinct in the demo.
+    """
     p = user_prompt.lower()
-    if "curs" in p or "modul" in p or "lecție" in p:
+
+    topic = ""
+    m = re.search(r"topic\s*:\s*([^\n]+)", user_prompt, flags=re.IGNORECASE)
+    if m:
+        topic = m.group(1).strip()
+    if not topic:
+        topic = "subiectul cursului"
+    topic_short = topic[:40] or "subiect"
+
+    is_outline = ("schelet" in p) or ("outline" in p) or ("doar structura" in p)
+    is_single_lesson = "lecția" in p and ("/4" in p or "/3" in p or "/5" in p or "/6" in p)
+    is_course = (("curs" in p or "modul" in p) and not is_outline and not is_single_lesson)
+
+    count = 4
+    m = re.search(r"(\d+)\s*lec", user_prompt, flags=re.IGNORECASE)
+    if m:
+        try:
+            count = max(2, min(8, int(m.group(1))))
+        except ValueError:
+            count = 4
+
+    # Per-lesson title scaffold so each one is visibly different even without
+    # the live model.
+    arcs = [
+        ("Atinge primul rezultat", "primul rezultat concret", "afișează"),
+        ("Construiește pas cu pas", "structura de bază", "construiește"),
+        ("Rezolvă o capcană reală", "o capcană tipică", "depanează"),
+        ("Combină într-un proiect", "un mini-proiect", "combină"),
+        ("Optimizează soluția", "optimizarea soluției", "îmbunătățește"),
+        ("Pregătește următorul nivel", "saltul la nivelul următor", "extinde"),
+    ]
+
+    def _lesson(i: int, with_game: bool, with_final: bool) -> dict:
+        verb_title, focus, verb = arcs[i % len(arcs)]
+        title = f"L{i + 1}: {verb_title}"
+        body = (
+            f"Această lecție pornește de la {focus} pentru {topic_short}. Ideea: "
+            f"vezi un rezultat mic acum, apoi {verb} peste el.\n\n"
+            f"```js\n// Lecția {i + 1} — {focus}\n"
+            f"const pas = {i + 1};\nconsole.log('{topic_short} pasul', pas);\n```\n"
+            f"Schimbă valoarea `pas` și rulează din nou ca să vezi efectul. Așa creezi "
+            f"reflexul: modifici puțin, observi imediat, treci mai departe."
+        )
+        exercise = {
+            "type": "code",
+            "prompt": f"Scrie 2 linii care afișează 'pas {i + 1}' folosind console.log, ca în exemplu.",
+            "expected": f"const pas = {i + 1};\nconsole.log('{topic_short} pasul', pas);",
+            "hint": "Folosește exact modelul cu `const` și `console.log` din lecție.",
+        }
+        cards = [
+            {"front": "console.log", "back": f"afișează valoarea în consolă pentru {topic_short}."},
+            {"front": "const", "back": "etichetă pe o valoare care nu se schimbă după declarare."},
+            {"front": focus, "back": f"focusul lecției {i + 1} pentru {topic_short}."},
+        ]
+        out = {
+            "title": title,
+            "hook": f"După lecția asta poți {verb} un fragment de {topic_short} fără să copiezi.",
+            "body": body,
+            "key_terms": ["console.log", "const", focus],
+            "cards": cards,
+            "exercises": [exercise],
+        }
+        if with_game:
+            out["mini_game"] = {
+                "type": "bug_hunter",
+                "prompt": f"Găsește linia care nu se potrivește cu exemplul lecției {i + 1}.",
+                "lines": [
+                    f"const pas = {i + 1};",
+                    f"console.log('{topic_short} pasul', pas);",
+                    f"console.log({topic_short.split()[0] if topic_short else 'x'}_necunoscut);",
+                ],
+                "buggy_index": 2,
+                "fix": f"console.log('{topic_short} pasul', pas);",
+            }
+        else:
+            out["mini_game"] = None
+        if with_final:
+            out["final_check"] = {
+                "type": "project",
+                "prompt": f"Scrie un mini-exemplu care folosește {topic_short} prin pașii din curs.",
+                "success_criteria": [
+                    "folosește o variabilă",
+                    "afișează rezultatul",
+                    f"se referă explicit la {topic_short}",
+                ],
+            }
+        else:
+            out["final_check"] = None
+        return out
+
+    if is_outline:
+        # Lightweight shape used by /api/tutor/course/outline — titles + tags only.
+        lessons = []
+        for i in range(count):
+            verb_title, focus, _verb = arcs[i % len(arcs)]
+            lessons.append({
+                "title": f"L{i + 1}: {verb_title}"[:36],
+                "subject": focus,
+                "tags": [topic_short.split()[0] if topic_short else "concept", focus.split()[0]],
+                "minutes": 5,
+            })
         return json.dumps({
-            "title": "Modul nou",
+            "title": f"{topic_short} — start"[:40],
+            "outcome": f"Aplici {topic_short} într-un caz mic, verificabil, în ~20 min.",
+            "lessons": lessons,
+        }, ensure_ascii=False)
+
+    if is_single_lesson:
+        # Full content for a single lesson — used by /api/tutor/lesson/{id}/generate
+        # when no model is available. Pull the position from the prompt so each
+        # lesson in a module renders as a distinct page.
+        pos = 1
+        m_pos = re.search(r"lec[țt]ia\s*(\d+)\s*/\s*(\d+)", user_prompt, flags=re.IGNORECASE)
+        total = count
+        if m_pos:
+            try:
+                pos = max(1, int(m_pos.group(1)))
+                total = max(pos, int(m_pos.group(2)))
+            except ValueError:
+                pass
+        with_game = ("adaugă mini_game" in p) or ("include mini_game" in p)
+        with_final = pos == total
+        return json.dumps(_lesson(pos - 1, with_game=with_game, with_final=with_final), ensure_ascii=False)
+
+    if is_course:
+        return json.dumps({
+            "title": f"{topic_short} — start"[:40],
             "lessons": [
-                {
-                    "title": "Lecția 1: Introducere",
-                    "body": "Teoria de bază a subiectului. Explicații clare, pas cu pas.",
-                    "exercises": [
-                        {"type": "fill", "prompt": "Completează: Un parametru este o variabilă declarată în ___ funcției.", "blanks": ["semnătura"], "hint": "Unde scrii numele funcției?"},
-                    ],
-                },
-                {
-                    "title": "Lecția 2: Aprofundare",
-                    "body": "Exemple practice și edge cases.",
-                    "exercises": [
-                        {"type": "code", "prompt": "Scrie o funcție `dublu(n)` care returnează `n * 2`.", "expected": "def dublu(n):\n    return n * 2", "hint": "Folosește `def` și `return`."},
-                    ],
-                },
+                _lesson(i, with_game=(i in (0, count - 1)), with_final=(i == count - 1))
+                for i in range(count)
             ],
         }, ensure_ascii=False)
+
     if "exerciți" in p or "exercise" in p:
         return json.dumps({
             "exercises": [
@@ -942,33 +1061,67 @@ def _fallback_lesson_content(
     include_final_check: bool = False,
 ) -> dict:
     if subject == "Programare":
+        # Pick a language hint from the topic so the fallback example uses code
+        # that at least visually matches what the user asked to learn (e.g. a
+        # "python loops" course shouldn't fall back to JS).
+        topic_low = (str(topic) or "").lower()
+        if "python" in topic_low or "py " in topic_low or "pandas" in topic_low or "numpy" in topic_low:
+            lang, var_decl, log_fn = "python", "nume = 'Ana'", "print(nume)"
+            lang_label, alt_decl, alt_log = "python", "nume = 'Mihai'", "print('Salut, ' + nume)"
+            buggy_lines = [
+                "nume = 'Alex'",
+                "print(nume)",
+                "print(varsta)",
+            ]
+            fix_line = "print(nume)"
+            ex_expected = "nume = 'Alex'\nprint(nume)"
+            ex_hint = "Folosește modelul cu `=` și `print` din lecție, fără `const` sau `console.log`."
+        elif "html" in topic_low or "css" in topic_low:
+            lang, var_decl, log_fn = "html", "<p id='nume'>Ana</p>", "<script>console.log(document.getElementById('nume').textContent)</script>"
+            lang_label, alt_decl, alt_log = "html", "<p id='nume'>Mihai</p>", "<script>console.log('Salut, ' + document.getElementById('nume').textContent)</script>"
+            buggy_lines = [
+                "<p id='nume'>Alex</p>",
+                "<script>console.log(document.getElementById('nume').textContent)</script>",
+                "<script>console.log(varsta)</script>",
+            ]
+            fix_line = "<script>console.log(document.getElementById('nume').textContent)</script>"
+            ex_expected = "<p id='nume'>Alex</p>\n<script>console.log(document.getElementById('nume').textContent)</script>"
+            ex_hint = "Folosește exact pattern-ul cu `<p id>` și `console.log` din lecție."
+        else:
+            lang, var_decl, log_fn = "js", "const nume = 'Ana';", "console.log(nume);"
+            lang_label, alt_decl, alt_log = "js", "const nume = 'Mihai';", "console.log('Salut, ' + nume);"
+            buggy_lines = [
+                "const nume = 'Alex';",
+                "console.log(nume);",
+                "console.log(varsta);",
+            ]
+            fix_line = "console.log(nume);"
+            ex_expected = "const nume = 'Alex';\nconsole.log(nume);"
+            ex_hint = "Folosește exact modelul cu `const` și `console.log` din lecție."
+
         body = (
             f"{lesson_title} pornește de la o idee simplă: {lesson_subject}. "
             f"În {topic}, nu înveți ca să memorezi definiții, ci ca să faci un "
             "mic rezultat care rulează.\n\n"
-            "Exemplu scurt:\n```js\nconst nume = 'Ana';\nconsole.log(nume);\n```\n"
+            f"Exemplu scurt:\n```{lang}\n{var_decl}\n{log_fn}\n```\n"
             "Aici creezi o valoare și o afișezi. E ca o etichetă pe un sertar: "
             "știi unde ai pus ceva și îl poți folosi mai târziu.\n\n"
-            "Schimbă valoarea și rulează din nou:\n```js\nconst nume = 'Mihai';\n"
-            "console.log('Salut, ' + nume);\n```\nAsta e baza: modifici puțin, "
+            f"Schimbă valoarea și rulează din nou:\n```{lang_label}\n{alt_decl}\n"
+            f"{alt_log}\n```\nAsta e baza: modifici puțin, "
             "vezi imediat efectul, apoi construiești peste."
         )
         exercise = {
             "type": "code",
             "prompt": "Scrie 2 linii: creează `nume` cu valoarea 'Alex' și afișează-l.",
-            "expected": "const nume = 'Alex';\nconsole.log(nume);",
-            "hint": "Folosește exact modelul cu `const` și `console.log` din lecție.",
+            "expected": ex_expected,
+            "hint": ex_hint,
         }
         game = {
             "type": "bug_hunter",
-            "prompt": "Găsește linia care nu respectă exemplul.",
-            "lines": [
-                "const nume = 'Alex';",
-                "console.log(nume);",
-                "console.log(varsta);",
-            ],
+            "prompt": f"Găsește linia care nu respectă exemplul de {lesson_subject}.",
+            "lines": buggy_lines,
             "buggy_index": 2,
-            "fix": "console.log(nume);",
+            "fix": fix_line,
         } if include_mini_game else None
         final_check = {
             "type": "project",

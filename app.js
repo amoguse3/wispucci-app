@@ -111,6 +111,8 @@ const api = {
     apiFetch(`/api/tutor/minigame?lesson_id=${encodeURIComponent(lessonId)}&game_type=${encodeURIComponent(type)}`, { method: 'POST' }),
   miniTest: (moduleId) =>
     apiFetch(`/api/tutor/test/build?module_id=${encodeURIComponent(moduleId)}`, { method: 'POST' }),
+  completeLesson: (lessonId) =>
+    apiFetch(`/api/lessons/${encodeURIComponent(lessonId)}/complete`, { method: 'POST' }),
   stats: () => apiFetch('/api/me/stats'),
   leaderboard: (period = 'weekly') => apiFetch(`/api/leaderboard/${period}`),
   saveSettings: (settings) =>
@@ -411,8 +413,16 @@ function showView(name) {
   if (name === 'stats')    renderStats();
   if (name === 'settings') initSettingsView();
   if (name === 'lesson') {
+    // Empty-state guard: if the user lands on the lesson view without a
+    // generated module (e.g. fresh login, deep-link, after celebrate reset),
+    // bounce them into the course-intent funnel so they can generate one
+    // instead of staring at a blank lesson card.
+    if (!state.currentLesson || !state.generatedModule) {
+      showView('onboarding-1');
+      return;
+    }
     initLesson();
-    if (state.currentLesson) applyLessonToView(state.currentLesson);
+    applyLessonToView(state.currentLesson);
   }
   if (name === 'home')     refreshHome();
 
@@ -1275,10 +1285,15 @@ function _onNextStepClick() {
     return;
   }
 
-  // Otherwise advance to the next lesson.
+  // Otherwise advance to the next lesson. Persist completion of the current
+  // lesson server-side so /api/me/stats counts it. Until this PR, we only
+  // updated the local progress bar — backend UserProgress stayed at 0% and
+  // the stats screen kept showing "0 lecții” after every finished module.
   const idx = mod.lessons.findIndex(l => l.id === cur.id);
   const total = mod.lessons.length;
   if (idx < 0) return;
+
+  _markLessonCompleteOnServer(cur.id);
 
   const isLast = idx >= total - 1;
   if (isLast) {
@@ -1319,6 +1334,22 @@ function _onNextStepClick() {
         }
       }
     }).catch(() => {});
+  }
+}
+
+// Persist lesson completion so backend stats reflect what the user finished.
+// Idempotent on the server side, so calling on every advance is fine. We
+// also remember which lesson IDs we've already POSTed to avoid spamming the
+// API when the user moves back-and-forth between stages of the same lesson.
+const _completedLessonIds = new Set();
+async function _markLessonCompleteOnServer(lessonId) {
+  if (!lessonId || _completedLessonIds.has(lessonId)) return;
+  _completedLessonIds.add(lessonId);
+  try {
+    await api.completeLesson(lessonId);
+  } catch (_err) {
+    // Network/auth blip — allow retry next time the user advances.
+    _completedLessonIds.delete(lessonId);
   }
 }
 
