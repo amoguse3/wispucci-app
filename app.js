@@ -991,13 +991,13 @@ function _ensureCinemaFrame() {
   if (frame.src && frame.src !== 'about:blank' && !frame.src.endsWith('about:blank')) return;
   frame.addEventListener('load', () => {
     frame.classList.add('is-ready');
-    const sk = _cinemaSkeleton();
-    if (sk) sk.classList.add('is-hidden');
     _cinemaFrameReady = true;
     if (_cinemaPending) {
       _postToCinema(_cinemaPending);
       _cinemaPending = null;
     }
+    // Skeleton stays visible until the first REAL lesson is posted —
+    // hiding it in _postLessonToCinema below.
   }, { once: true });
   frame.src = CINEMA_FRAME_SRC;
 }
@@ -1018,6 +1018,13 @@ function _postToCinema(payload) {
 
 function _postLessonToCinema(lesson) {
   if (!lesson) return;
+  // Skip stub lessons (outline placeholder before the body arrives).
+  // Without this guard, the cinema starts a flow with empty content,
+  // then has to be force-restarted when the real lesson arrives —
+  // causing visible phrase overlap ("text-on-text") during the swap.
+  const isStub = !lesson.body
+    || (lesson.practice && lesson.practice._loading);
+  if (isStub) return;
   const mod = state.generatedModule || {};
   _postToCinema({
     type: 'wispucci:lesson',
@@ -1027,6 +1034,11 @@ function _postLessonToCinema(lesson) {
     lessonIdx: lesson.index || 1,
     moduleLessons: Array.isArray(mod.lessons) ? mod.lessons.length : 1
   });
+  // Once a real lesson is in flight to the iframe, the parent's
+  // skeleton can go (the iframe will start playing within a few
+  // hundred ms).
+  const sk = _cinemaSkeleton();
+  if (sk) sk.classList.add('is-hidden');
 }
 
 // Listen for messages back from the cinema iframe.
@@ -1036,11 +1048,14 @@ window.addEventListener('message', (e) => {
   if (data.type === 'wispucci:exit') {
     showView('home');
   } else if (data.type === 'wispucci:complete') {
-    // Treat as full module completion — same flow as the old celebrate.
+    // Lesson finale finished. We DON'T auto-navigate away — the demo
+    // holds the finale screen and the user decides when to leave (via
+    // topnav "Acasă", the in-frame exit button, or "next lesson"). If
+    // we navigated automatically, short lessons (no practica) would
+    // "skip" past the user before they even read the finale.
     if (typeof celebrate === 'function') {
       try { celebrate(); } catch (_) { /* best-effort */ }
     }
-    showView('home');
   } else if (data.type === 'wispucci:ready') {
     _cinemaFrameReady = true;
     if (_cinemaPending) {
