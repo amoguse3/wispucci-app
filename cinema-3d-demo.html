@@ -601,6 +601,27 @@ body.layout-stage .c3d-phrases { display: none; }
   border-radius: 4px;
   font-size: 0.9em;
 }
+.c3d-flash-card .body .c3d-flash-pre {
+  background: rgba(239, 221, 141, 0.06);
+  border: 1px solid rgba(239, 221, 141, 0.18);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 0;
+  max-width: 360px;
+  text-align: left;
+  overflow-x: auto;
+}
+.c3d-flash-card .body .c3d-flash-pre code {
+  font-family: 'JetBrains Mono', monospace;
+  background: transparent;
+  color: var(--text-1);
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+  display: block;
+}
 .c3d-flash-card .hint {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
@@ -2184,8 +2205,11 @@ function lessonToCinemaContent(payload) {
   const hook  = String(practice.hook || '').trim();
   const paragraphs = _bodyParagraphs(body);
 
+  // We never run the Python `range(N)` interactive stage for lessons — it's
+  // a standalone-demo party trick. If the lesson body has a code block,
+  // we showcase it as a static card in Act 5's flash deck instead.
   const code = _firstCodeBlock(body);
-  const hasInteractive = !!code;
+  const hasInteractive = false;
 
   // Pick a "topic noun" for the hook: prefer the last meaningful word
   // of the title (usually the noun in Romanian), fall back to first word.
@@ -2242,8 +2266,17 @@ function lessonToCinemaContent(payload) {
     });
   }
 
-  // ── Flash deck (pre-Act 5) — use practice.cards if any, else top paragraphs ──
+  // ── Flash deck (pre-Act 5) — code block (if any), then practice.cards
+  //    or top paragraphs as fallback. ──────────────────────────────
   const flash = [];
+  if (code) {
+    flash.push({
+      tag: 'Cod',
+      title: 'Uită-te.',
+      body: '<pre class="c3d-flash-pre"><code>' + _escHtml(code) + '</code></pre>',
+      hint: 'glisează →'
+    });
+  }
   if (Array.isArray(practice.cards) && practice.cards.length > 0) {
     practice.cards.slice(0, 4).forEach((c, idx) => {
       flash.push({
@@ -2263,6 +2296,11 @@ function lessonToCinemaContent(payload) {
         hint: idx < 2 ? 'glisează →' : 'gata'
       });
     });
+  }
+  // Final card after content: a soft outro so the deck doesn't feel abrupt.
+  if (flash.length > 0) {
+    const last = flash[flash.length - 1];
+    if (last && last.hint !== 'gata') last.hint = 'gata';
   }
 
   // ── PRACTICA (Act 5 MC) — only `choice` exercises with answers[] ──

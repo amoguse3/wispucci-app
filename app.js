@@ -974,7 +974,7 @@ async function _prefetchRemainingLessons(outline) {
 //   { type: 'wispucci:exit' }      // user wants to leave the cinema
 //   { type: 'wispucci:complete' }  // user finished all 5 acts
 // ─────────────────────────────────────────────────────────────────────
-const CINEMA_FRAME_SRC = './cinema-3d-demo.html?embed=1';
+const CINEMA_FRAME_SRC = './cinema-3d-demo.html?embed=1&v=31';
 let _cinemaFrameReady = false;
 let _cinemaPending = null;
 
