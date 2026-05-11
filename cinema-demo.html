@@ -1,0 +1,1442 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Wispucci — Cinema (demo)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./style.css?v=28" />
+
+<style>
+/* ===========================================================================
+   CINEMA DEMO — standalone test page
+   Uses Wispucci design tokens from style.css; layout is self-contained.
+=========================================================================== */
+
+body { overflow: hidden; }
+
+.cinema {
+  position: fixed; inset: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  align-items: center;
+  justify-items: center;
+  padding: 24px;
+}
+
+/* ─── Stage frame ─────────────────────────────────────────── */
+.cinema-stage {
+  width: min(720px, 92vw);
+  height: min(680px, 80vh);
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  align-items: center;
+  justify-items: center;
+}
+
+/* ─── Orb container in stage center ───────────────────────── */
+.cinema-orb-host {
+  grid-row: 2;
+  width: 220px; height: 220px;
+  display: grid; place-items: center;
+  position: relative;
+}
+.cinema-orb-host .orb { width: 220px; height: 220px; }
+
+/* ─── Text panels (top + bottom of orb) ───────────────────── */
+.cinema-top, .cinema-bottom {
+  width: 100%;
+  position: relative;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 0 20px;
+  grid-template-areas: "slot";
+}
+.cinema-top > *, .cinema-bottom > * { grid-area: slot; }
+.cinema-top { grid-row: 1; align-self: end; padding-bottom: 24px; }
+.cinema-bottom { grid-row: 3; align-self: start; padding-top: 24px; }
+
+/* Stacked panels in the bottom slot — only the active one accepts input.
+   Without this, hidden (opacity:0) panels still overlay the active panel and
+   swallow taps because they share the same grid cell. */
+.cinema-bottom > .cinema-code,
+.cinema-bottom > .cinema-quiz,
+.cinema-bottom > .cinema-cards-panel,
+.cinema-bottom > .cinema-aha {
+  pointer-events: none;
+}
+.cinema-bottom > .cinema-code.is-visible,
+.cinema-bottom > .cinema-quiz.is-visible,
+.cinema-bottom > .cinema-cards-panel.is-visible,
+.cinema-bottom > .cinema-aha.is-visible {
+  pointer-events: auto;
+}
+
+.cinema-line {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: clamp(22px, 3.4vw, 32px);
+  line-height: 1.25;
+  color: var(--text);
+  letter-spacing: -.005em;
+  min-height: 1.25em;
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+.cinema-line.is-visible { opacity: 1; }
+
+/* TikTok-style phrase snap — bigger, BOLD entry/exit */
+.cinema-line.is-snap {
+  font-size: clamp(34px, 5.2vw, 56px);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -.018em;
+  filter: drop-shadow(0 0 18px rgba(var(--accent-rgb), .20));
+  transform-origin: center;
+  animation: phraseSnapIn .22s cubic-bezier(.2,.9,.25,1.15);
+}
+@keyframes phraseSnapIn {
+  0%   { opacity: 0; transform: translateY(8px) scale(.94); filter: blur(2px); }
+  60%  { opacity: 1; transform: translateY(-1px) scale(1.02); filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.cinema-line em {
+  color: var(--accent);
+  font-style: italic;
+}
+.cinema-line .caret {
+  display: inline-block;
+  width: 2px; height: 1em;
+  background: var(--accent);
+  vertical-align: -0.15em;
+  margin-left: 2px;
+  animation: caretBlink 1s steps(2) infinite;
+}
+@keyframes caretBlink { 50% { opacity: 0; } }
+
+/* ─── Topic picker (entry stage) ──────────────────────────── */
+.cinema-pick {
+  width: min(560px, 90vw);
+  display: grid; gap: 16px;
+  text-align: center;
+  opacity: 1; transition: opacity .4s ease, transform .4s ease;
+}
+.cinema-pick.is-hidden {
+  opacity: 0; transform: translateY(-8px);
+  pointer-events: none;
+}
+.cinema-pick h1 {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(28px, 4.2vw, 44px);
+  font-weight: 400;
+  line-height: 1.15;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.cinema-pick h1 em { color: var(--accent); }
+.cinema-pick p.lead {
+  color: var(--text-2);
+  font-size: 15px;
+}
+.cinema-presets {
+  display: grid; gap: 10px;
+  grid-template-columns: 1fr;
+  margin-top: 8px;
+}
+.cinema-preset {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px;
+  background: rgba(var(--bg-card-rgb), .6);
+  border: 1px solid rgba(var(--accent-rgb), .14);
+  border-radius: var(--r-3);
+  color: var(--text);
+  text-align: left;
+  font-size: 15px;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+.cinema-preset:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--accent-rgb), .35);
+  background: rgba(var(--bg-card-rgb), .8);
+}
+.cinema-preset .tag {
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), .14);
+  color: var(--accent);
+  font-weight: 600;
+}
+.cinema-preset .title {
+  font-family: 'Instrument Serif', serif;
+  font-size: 18px;
+  flex: 1;
+}
+
+/* ─── Code snippet panel ──────────────────────────────────── */
+.cinema-code {
+  width: min(620px, 92vw);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  background: rgba(var(--bg-deep-rgb), .85);
+  border: 1px solid rgba(var(--accent-rgb), .12);
+  border-radius: var(--r-3);
+  padding: 18px 20px;
+  text-align: left;
+  white-space: pre;
+  color: var(--text-2);
+  min-height: 6em;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .35s ease, transform .35s ease;
+  overflow: hidden;
+}
+.cinema-code.is-visible { opacity: 1; transform: translateY(0); }
+.cinema-code .tok-kw { color: #C792EA; }      /* keyword */
+.cinema-code .tok-fn { color: var(--accent); }
+.cinema-code .tok-str { color: var(--accent-soft); }
+.cinema-code .tok-num { color: #F78C6C; }
+.cinema-code .tok-com { color: var(--text-3); font-style: italic; }
+.cinema-code .caret {
+  display: inline-block;
+  width: 7px; height: 1em;
+  background: var(--accent);
+  vertical-align: -0.15em;
+  animation: caretBlink 1s steps(2) infinite;
+}
+
+/* ─── Word-flash for language ─────────────────────────────── */
+.cinema-flash {
+  width: 100%;
+  min-height: 4em;
+  display: grid; place-items: center;
+  position: relative;
+}
+.cinema-flash .word {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(34px, 5.4vw, 56px);
+  color: var(--accent);
+  text-align: center;
+  letter-spacing: -.01em;
+  opacity: 0;
+  transform: translateY(8px) scale(.96);
+  transition: opacity .12s ease, transform .12s ease;
+  position: absolute;
+}
+.cinema-flash .word.is-in {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.cinema-flash .word .gloss {
+  display: block;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  color: var(--text-2);
+  letter-spacing: .04em;
+  margin-top: 6px;
+  font-style: normal;
+}
+
+/* ─── Interaction (quiz) ──────────────────────────────────── */
+.cinema-quiz {
+  width: min(540px, 92vw);
+  display: grid; gap: 10px;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .35s ease, transform .35s ease;
+}
+.cinema-quiz.is-visible { opacity: 1; transform: translateY(0); }
+.cinema-quiz .q-prompt {
+  font-family: 'Instrument Serif', serif;
+  font-size: 20px;
+  text-align: center;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.cinema-quiz .q-prompt code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  background: rgba(var(--bg-deep-rgb), .7);
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: var(--accent);
+}
+.cinema-quiz .q-opt {
+  padding: 14px 18px;
+  background: rgba(var(--bg-card-rgb), .6);
+  border: 1px solid rgba(var(--accent-rgb), .14);
+  border-radius: var(--r-3);
+  color: var(--text);
+  text-align: left;
+  font-size: 15px;
+  font-family: 'JetBrains Mono', monospace;
+  transition: transform .15s ease, border-color .18s ease, background .15s ease;
+}
+.cinema-quiz .q-opt:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(var(--accent-rgb), .35);
+}
+.cinema-quiz .q-opt.is-correct {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), .14);
+  color: var(--accent);
+}
+.cinema-quiz .q-opt.is-wrong {
+  border-color: var(--danger);
+  background: rgba(200, 85, 58, .12);
+  opacity: .7;
+}
+.cinema-quiz .q-opt:disabled { cursor: default; }
+
+/* ─── Aha celebration ─────────────────────────────────────── */
+.cinema-aha {
+  text-align: center;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .4s ease, transform .4s ease;
+}
+.cinema-aha.is-visible { opacity: 1; transform: translateY(0); }
+.cinema-aha .xp {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(40px, 6vw, 64px);
+  color: var(--accent);
+  background: linear-gradient(180deg, var(--accent-spark) 0%, var(--accent) 60%, var(--accent-deep) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 24px rgba(var(--accent-rgb), .35));
+  line-height: 1;
+}
+.cinema-aha .xp em { font-style: italic; }
+.cinema-aha .label {
+  font-size: 13px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-top: 8px;
+}
+.cinema-aha .streak {
+  margin-top: 18px;
+  font-size: 16px;
+  color: var(--text);
+}
+.cinema-aha .streak strong { color: var(--accent); }
+.cinema-aha .next {
+  margin-top: 22px;
+  padding: 12px 24px;
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--accent) 60%, var(--accent-deep) 100%);
+  color: var(--bg-deep);
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* ─── Top-right controls (mute + restart) ─────────────────── */
+.cinema-controls {
+  position: fixed;
+  top: 18px; right: 20px;
+  z-index: 50;
+  display: flex; gap: 8px;
+}
+.cinema-restart, .cinema-mute {
+  padding: 8px 14px;
+  font-size: 12px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: rgba(var(--bg-card-rgb), .55);
+  border: 1px solid rgba(var(--accent-rgb), .14);
+  border-radius: 999px;
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.cinema-restart:hover, .cinema-mute:hover {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), .35);
+}
+.cinema-mute .ico { font-size: 14px; line-height: 1; }
+.cinema-mute.is-muted {
+  color: var(--text-3);
+  border-color: rgba(var(--accent-rgb), .08);
+}
+.cinema-mute.is-muted .ico::after { content: ' OFF'; font-size: 10px; opacity: .7; }
+
+/* ─── Branding badge ──────────────────────────────────────── */
+.cinema-badge {
+  position: fixed;
+  bottom: 18px; left: 20px;
+  z-index: 50;
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.cinema-badge em {
+  color: var(--accent);
+  font-style: italic;
+  font-family: 'Instrument Serif', serif;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+}
+
+/* ─── Sparkle burst at aha ────────────────────────────────── */
+.spark {
+  position: absolute;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 0 8px var(--accent-soft);
+}
+
+/* ─── Tap-to-Discover cards game ──────────────────────────── */
+.cinema-cards-panel {
+  width: min(560px, 92vw);
+  display: grid;
+  gap: 14px;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .3s ease, transform .3s ease;
+}
+.cinema-cards-panel.is-visible { opacity: 1; transform: translateY(0); }
+
+.cards-prompt {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(18px, 2.4vw, 22px);
+  text-align: center;
+  color: var(--text);
+  line-height: 1.3;
+}
+.cards-prompt code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .92em;
+  background: rgba(var(--bg-deep-rgb), .7);
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: var(--accent);
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.card {
+  position: relative;
+  aspect-ratio: 1.1;
+  display: grid; place-items: center;
+  background: rgba(var(--bg-card-rgb), .7);
+  border: 1px solid rgba(var(--accent-rgb), .14);
+  border-radius: var(--r-3);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(20px, 2.8vw, 28px);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  transition: transform .14s ease, border-color .15s ease, background .15s ease;
+  will-change: transform;
+}
+.card:hover:not(.is-locked):not(.is-captured):not(.is-rejected) {
+  transform: translateY(-2px);
+  border-color: rgba(var(--accent-rgb), .42);
+  background: rgba(var(--bg-card-rgb), .9);
+}
+.card.is-captured {
+  opacity: 0;
+  pointer-events: none;
+}
+.card.is-rejected {
+  animation: cardShake .35s ease;
+  border-color: var(--danger);
+  background: rgba(200, 85, 58, .14);
+}
+@keyframes cardShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.card .num {
+  position: relative; z-index: 2;
+}
+
+.cards-basket {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 12px 16px;
+  background: rgba(var(--bg-deep-rgb), .7);
+  border: 1px dashed rgba(var(--accent-rgb), .25);
+  border-radius: var(--r-3);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  color: var(--accent);
+  transition: border-color .25s ease, box-shadow .25s ease;
+}
+.cards-basket.is-full {
+  border-color: var(--accent);
+  border-style: solid;
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), .35);
+}
+.cards-basket .bracket { color: var(--text-2); }
+.cards-basket .slot {
+  display: inline-block;
+  min-width: 1.5em;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(-12px) scale(.6);
+  transition: opacity .25s ease, transform .35s cubic-bezier(.2,.9,.25,1.15);
+}
+.cards-basket .slot.is-in {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Flying number animation (the card flies into basket) */
+.flying-num {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 24px;
+  color: var(--accent);
+  filter: drop-shadow(0 0 12px rgba(var(--accent-rgb), .6));
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .cinema-stage { height: min(620px, 86vh); }
+  .cinema-orb-host { width: 160px; height: 160px; }
+  .cinema-orb-host .orb { width: 160px; height: 160px; }
+  .cinema-line { font-size: 20px; }
+  .cinema-code { font-size: 12px; padding: 14px 16px; }
+}
+</style>
+</head>
+<body class="in-lesson">
+
+  <!-- Cinematic background layers (reused) -->
+  <canvas class="embers-canvas" id="embersCanvas"></canvas>
+  <div class="aurora-layer"></div>
+  <div class="grain-layer"></div>
+
+  <div class="cinema-controls">
+    <button class="cinema-mute" id="muteBtn" type="button" aria-label="toggle voice">
+      <span class="ico" id="muteIco">♫</span>
+    </button>
+    <button class="cinema-restart" id="restartBtn" type="button">RESTART</button>
+  </div>
+
+  <main class="cinema">
+    <div class="cinema-stage" id="stage">
+
+      <!-- TOP SLOT (Orb-speak text, word-flash) -->
+      <div class="cinema-top" id="topSlot">
+        <p class="cinema-line" id="topLine"></p>
+        <div class="cinema-flash" id="flashHost" hidden></div>
+      </div>
+
+      <!-- CENTER — the Orb -->
+      <div class="cinema-orb-host" id="orbHost">
+        <div class="orb" id="theOrb">
+          <div class="orb-glow"></div>
+          <div class="orb-halo halo-1"></div>
+          <div class="orb-halo halo-2"></div>
+          <div class="orb-halo halo-3"></div>
+          <div class="orb-core">
+            <div class="orb-shine"></div>
+            <svg class="orb-face" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+              <g class="face-eyes">
+                <ellipse class="eye eye-l" cx="38" cy="50" rx="3.6" ry="5.4"/>
+                <ellipse class="eye eye-r" cx="62" cy="50" rx="3.6" ry="5.4"/>
+                <circle class="eye-shine eye-shine-l" cx="39.5" cy="48" r="1.2"/>
+                <circle class="eye-shine eye-shine-r" cx="63.5" cy="48" r="1.2"/>
+              </g>
+              <path class="mouth" d="M 40 65 Q 50 67 60 65" fill="none" stroke-linecap="round"/>
+              <g class="cheeks">
+                <circle class="cheek cheek-l" cx="30" cy="60" r="3"/>
+                <circle class="cheek cheek-r" cx="70" cy="60" r="3"/>
+              </g>
+            </svg>
+          </div>
+          <div class="orb-orbit"><span class="orbit-dot"></span><span class="orbit-dot"></span><span class="orbit-dot"></span></div>
+          <div class="orb-shimmer"></div>
+        </div>
+      </div>
+
+      <!-- BOTTOM SLOT — picker, code, quiz, aha (swap content here) -->
+      <div class="cinema-bottom" id="bottomSlot">
+
+        <!-- Stage A: Topic picker -->
+        <div class="cinema-pick" id="pickPanel">
+          <h1><em>Ce</em> vrei să înțelegi?</h1>
+          <p class="lead">Alege un subiect. Pornim cinema-flow în &lt; 30 sec.</p>
+          <div class="cinema-presets">
+            <button class="cinema-preset" data-topic="python-for">
+              <span class="tag">cod</span>
+              <span class="title">Python <em>for</em> loops</span>
+            </button>
+            <button class="cinema-preset" data-topic="spanish-travel">
+              <span class="tag">limbă</span>
+              <span class="title">Spanish for <em>travel</em></span>
+            </button>
+            <button class="cinema-preset" data-topic="compound-interest">
+              <span class="tag">viață</span>
+              <span class="title"><em>Compound</em> interest</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Stage C: Bottom line (lesson text) -->
+        <p class="cinema-line" id="bottomLine"></p>
+
+        <!-- Stage D: Code panel -->
+        <div class="cinema-code" id="codePanel"></div>
+
+        <!-- Stage E: Quiz -->
+        <div class="cinema-quiz" id="quizPanel">
+          <p class="q-prompt" id="quizPrompt"></p>
+          <button class="q-opt" data-opt="0"></button>
+          <button class="q-opt" data-opt="1"></button>
+          <button class="q-opt" data-opt="2"></button>
+        </div>
+
+        <!-- Stage E2: Tap-to-Discover cards game -->
+        <div class="cinema-cards-panel" id="cardsPanel">
+          <p class="cards-prompt" id="cardsPrompt"></p>
+          <div class="cards-grid" id="cardsGrid"></div>
+          <div class="cards-basket" id="cardsBasket">
+            <span class="bracket">[</span>
+            <span class="slots" id="basketSlots"></span>
+            <span class="bracket">]</span>
+          </div>
+        </div>
+
+        <!-- Stage F: Aha -->
+        <div class="cinema-aha" id="ahaPanel">
+          <div class="xp">+12 <em>XP</em></div>
+          <div class="label">aha moment</div>
+          <div class="streak">streak: <strong>day 1</strong> · 🔥</div>
+          <button class="next" id="nextLessonBtn">Următoarea lecție →</button>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <div class="cinema-badge"><em>Wispucci</em>  ·  cinema-demo</div>
+
+<script>
+/* ===========================================================================
+   CINEMA DEMO — script
+   Standalone state machine that simulates the first 30 seconds after the user
+   picks a topic. Mock data only; no backend calls.
+=========================================================================== */
+(() => {
+  'use strict';
+
+  // ── DOM refs ─────────────────────────────────────────────
+  const $ = (id) => document.getElementById(id);
+  const orb      = $('theOrb');
+  const topLine  = $('topLine');
+  const bottomLine = $('bottomLine');
+  const flashHost  = $('flashHost');
+  const pickPanel  = $('pickPanel');
+  const codePanel  = $('codePanel');
+  const quizPanel  = $('quizPanel');
+  const quizPrompt = $('quizPrompt');
+  const quizOpts   = Array.from(document.querySelectorAll('.q-opt'));
+  const cardsPanel  = $('cardsPanel');
+  const cardsPrompt = $('cardsPrompt');
+  const cardsGrid   = $('cardsGrid');
+  const cardsBasket = $('cardsBasket');
+  const basketSlots = $('basketSlots');
+  const ahaPanel   = $('ahaPanel');
+  const bottomSlot = $('bottomSlot');
+  const restartBtn = $('restartBtn');
+  const nextBtn    = $('nextLessonBtn');
+  const muteBtn    = $('muteBtn');
+  const muteIco    = $('muteIco');
+
+  // ── State ────────────────────────────────────────────────
+  let abortFlag = false;
+  let currentTopic = null;
+  let muted = (localStorage.getItem('cinemaMuted') === '1');
+
+  // ── Helpers ──────────────────────────────────────────────
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  function setOrbState(state) {
+    orb.classList.remove(
+      'is-listening', 'is-thinking', 'is-speaking',
+      'is-celebrating', 'is-confused', 'is-sad'
+    );
+    if (state) orb.classList.add(state);
+  }
+
+  function hideAllBottom() {
+    pickPanel.classList.add('is-hidden');
+    bottomLine.classList.remove('is-visible');
+    codePanel.classList.remove('is-visible');
+    quizPanel.classList.remove('is-visible');
+    cardsPanel.classList.remove('is-visible');
+    ahaPanel.classList.remove('is-visible');
+  }
+
+  // ── Audio slot (placeholder) ────────────────────────────
+  // Drop audio files into ./audio/ matching the keys below and they will
+  // play at the corresponding moment. Missing files are silently ignored so
+  // the prototype still works without any audio installed.
+  const SOUND_FILES = {
+    phraseSnap:  'audio/phrase-snap.mp3',
+    typeTick:    'audio/type-tick.mp3',
+    cardCapture: 'audio/card-capture.mp3',
+    cardReject:  'audio/card-reject.mp3',
+    aha:         'audio/aha.mp3',
+    wordFlash:   'audio/word-flash.mp3'
+  };
+  const _audioCache = new Map();
+  function _loadAudio(key) {
+    if (_audioCache.has(key)) return _audioCache.get(key);
+    const src = SOUND_FILES[key];
+    if (!src) { _audioCache.set(key, null); return null; }
+    const a = new Audio(src);
+    a.preload = 'auto';
+    a.addEventListener('error', () => _audioCache.set(key, null), { once: true });
+    _audioCache.set(key, a);
+    return a;
+  }
+  // Pre-warm so first play has no latency once files land
+  Object.keys(SOUND_FILES).forEach(_loadAudio);
+
+  function playSound(key, opts = {}) {
+    if (muted) return;
+    const src = SOUND_FILES[key];
+    if (!src) return;
+    // Use a fresh clone so rapid-fire (typing) doesn't stomp itself.
+    try {
+      const a = new Audio(src);
+      a.volume = opts.volume ?? 0.55;
+      const p = a.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (_) { /* no-op when audio not yet supplied */ }
+  }
+
+  function stopSpeak() { /* legacy no-op kept for restart() compat */ }
+
+  function applyMuteUI() {
+    muteBtn.classList.toggle('is-muted', muted);
+    muteIco.textContent = muted ? '\u2715' : '\u266B';
+    muteBtn.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    muteBtn.setAttribute('aria-label', muted ? 'unmute' : 'mute');
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    localStorage.setItem('cinemaMuted', muted ? '1' : '0');
+    if (muted) stopSpeak();
+    applyMuteUI();
+  }
+
+  /* TikTok-style phrase snap. Each phrase is shown WHOLE for `hold` ms then
+     replaced by the next. Fires the 'phraseSnap' SFX on each beat.
+     Phrases can be:
+       - string: shown as-is
+       - { html, hold }: per-phrase override */
+  async function phraseSnap(phrases, opts = {}) {
+    const baseHold = opts.hold ?? 300;
+    topLine.classList.add('is-snap');
+    for (let i = 0; i < phrases.length; i++) {
+      if (abortFlag) return;
+      const item = (typeof phrases[i] === 'string') ? { html: phrases[i] } : phrases[i];
+      topLine.classList.remove('is-visible');
+      // Hard-reset animation
+      topLine.style.animation = 'none';
+      void topLine.offsetWidth;
+      topLine.style.animation = '';
+      topLine.innerHTML = item.html;
+      topLine.classList.add('is-visible');
+      playSound('phraseSnap');
+      await sleep(item.hold ?? baseHold);
+    }
+    topLine.classList.remove('is-snap');
+  }
+
+  /* Reveal text into an element char-by-char at ~70cps.
+     Snap the LAST `snapWords` words instantly (Apple-style fast finish). */
+  async function revealText(el, html, opts = {}) {
+    const cps = opts.cps ?? 75;
+    const snapWords = opts.snapWords ?? 3;
+    const showCaret = opts.caret ?? false;
+
+    // Strip to plain words for snap logic; we render html chunks instead.
+    // For demo simplicity we treat the source as plain text + simple <em>…</em> wrap.
+    el.innerHTML = '';
+    el.classList.add('is-visible');
+
+    // Split into segments: text and <em>…</em>
+    // Convert to a flat list of (char, inEm) tuples for sequential reveal.
+    const tuples = [];
+    let i = 0;
+    while (i < html.length) {
+      if (html.slice(i, i+4) === '<em>') {
+        i += 4;
+        while (i < html.length && html.slice(i, i+5) !== '</em>') {
+          tuples.push({ c: html[i], em: true });
+          i++;
+        }
+        i += 5;
+      } else {
+        tuples.push({ c: html[i], em: false });
+        i++;
+      }
+    }
+
+    // Find char index where the last `snapWords` words begin
+    let snapStart = tuples.length;
+    {
+      const text = tuples.map(t => t.c).join('');
+      const tokens = text.match(/\S+/g) || [];
+      if (tokens.length > snapWords) {
+        const tailWords = tokens.slice(-snapWords);
+        const tailJoined = tailWords.join(' ');
+        const idx = text.lastIndexOf(tailJoined);
+        if (idx >= 0) snapStart = idx;
+      }
+    }
+
+    const interval = Math.max(8, Math.round(1000 / cps));
+    let cur = '';
+    let curEm = false;
+    let chunks = []; // [{text, em}]
+
+    const flush = () => {
+      const html = chunks
+        .map(ch => ch.em ? `<em>${escapeHtml(ch.text)}</em>` : escapeHtml(ch.text))
+        .join('') + (showCaret ? '<span class="caret"></span>' : '');
+      el.innerHTML = html;
+    };
+
+    for (let idx = 0; idx < tuples.length; idx++) {
+      if (abortFlag) return;
+      const t = tuples[idx];
+      if (chunks.length === 0 || chunks[chunks.length-1].em !== t.em) {
+        chunks.push({ text: '', em: t.em });
+      }
+      chunks[chunks.length-1].text += t.c;
+
+      // After snap point, dump the remainder instantly
+      if (idx === snapStart - 1) {
+        flush();
+      } else if (idx >= snapStart) {
+        // accumulate silently, flush at end
+      } else {
+        flush();
+        await sleep(interval);
+      }
+    }
+    flush();
+    if (showCaret) {
+      // remove caret after a beat
+      await sleep(400);
+      el.innerHTML = chunks
+        .map(ch => ch.em ? `<em>${escapeHtml(ch.text)}</em>` : escapeHtml(ch.text))
+        .join('');
+    }
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, m => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[m]));
+  }
+
+  async function clearLine(el) {
+    if (!el.textContent) { el.classList.remove('is-visible'); return; }
+    el.classList.remove('is-visible');
+    await sleep(280);
+    el.innerHTML = '';
+  }
+
+  /* Type code char-by-char into codePanel.
+     Code is given as an array of {tok, text} where tok is the syntax class. */
+  async function typeCode(tokens, cpsArg) {
+    const cps = cpsArg ?? 110;
+    const interval = Math.max(4, Math.round(1000 / cps));
+    codePanel.classList.add('is-visible');
+    codePanel.innerHTML = '';
+
+    // Build a flat array of (char, tok) and render one at a time.
+    const flat = [];
+    for (const t of tokens) {
+      for (const ch of t.text) flat.push({ ch, tok: t.tok });
+    }
+
+    let html = '';
+    let lastTok = null;
+    // Throttle the typing-tick SFX so it doesn't fire on every byte (would
+    // be a buzzsaw at 180 cps). One tick roughly every 2 visible characters.
+    let tickCounter = 0;
+    for (let i = 0; i < flat.length; i++) {
+      if (abortFlag) return;
+      const { ch, tok } = flat[i];
+      if (tok !== lastTok) {
+        if (lastTok !== null) html += '</span>';
+        html += `<span class="tok-${tok}">`;
+        lastTok = tok;
+      }
+      html += escapeHtml(ch);
+      codePanel.innerHTML = html + (lastTok !== null ? '</span>' : '') + '<span class="caret"></span>';
+      if (ch.trim() && (tickCounter++ % 2 === 0)) playSound('typeTick', { volume: 0.28 });
+      await sleep(interval);
+    }
+    codePanel.innerHTML = html + (lastTok !== null ? '</span>' : '');
+  }
+
+  /* Word-flash sequence (for language topic).
+     Items: [{ word, gloss }]. Each shows for `show` ms with `gap` between. */
+  async function wordFlash(items, opts = {}) {
+    const show = opts.show ?? 380;
+    const gap  = opts.gap  ?? 140;
+    flashHost.hidden = false;
+    flashHost.innerHTML = '';
+
+    for (const it of items) {
+      if (abortFlag) return;
+      const el = document.createElement('div');
+      el.className = 'word';
+      el.innerHTML = `${escapeHtml(it.word)}<span class="gloss">${escapeHtml(it.gloss)}</span>`;
+      flashHost.appendChild(el);
+      // forced reflow then add transition class
+      el.offsetHeight;
+      el.classList.add('is-in');
+      await sleep(show);
+      el.classList.remove('is-in');
+      await sleep(gap);
+      el.remove();
+    }
+    flashHost.hidden = true;
+  }
+
+  // ── Topic scripts ────────────────────────────────────────
+  // Each script returns the full flow as an async generator-like function.
+
+  async function runPython() {
+    // —— Act 1: phrase-snap intro (TikTok rhythm) ——
+    setOrbState('is-thinking');
+    await phraseSnap([
+      { html: '<em>Loops?</em>',              hold: 480 },
+      { html: 'Tema mea <em>preferată</em>.', hold: 680 },
+      { html: 'Uite.',                        hold: 420 }
+    ]);
+
+    // —— Act 2: code prints under orb, phrases tick above in parallel ——
+    setOrbState('is-speaking');
+    typeCode([
+      { tok: 'com', text: '# numerele 1 → 5\n' },
+      { tok: 'kw',  text: 'for' },
+      { tok: 'pl',  text: ' i ' },
+      { tok: 'kw',  text: 'in' },
+      { tok: 'pl',  text: ' ' },
+      { tok: 'fn',  text: 'range' },
+      { tok: 'pl',  text: '(' },
+      { tok: 'num', text: '1' },
+      { tok: 'pl',  text: ', ' },
+      { tok: 'num', text: '6' },
+      { tok: 'pl',  text: '):\n    ' },
+      { tok: 'fn',  text: 'print' },
+      { tok: 'pl',  text: '(i)' }
+    ], 180);
+
+    await phraseSnap([
+      { html: 'Asta e <em>range</em>.',     hold: 520 },
+      { html: 'De la 1...',                 hold: 420 },
+      { html: 'până la 6.',                 hold: 420 },
+      { html: 'Dar <em>6 NU intră</em>.',   hold: 800 }
+    ]);
+
+    // —— Act 3: hide code, run card game ——
+    codePanel.classList.remove('is-visible');
+    await sleep(240);
+    codePanel.innerHTML = '';
+
+    await phraseSnap([
+      { html: 'Acum tu.',                  hold: 420 },
+      { html: '<em>Prinde</em> numerele.', hold: 700 }
+    ]);
+
+    setOrbState('is-listening');
+    topLine.classList.remove('is-snap', 'is-visible');
+    topLine.innerHTML = '';
+
+    const result = await runCards({
+      prompt:  'Atinge numerele din <code>range(1, 6)</code>',
+      cards:   [0, 1, 2, 3, 4, 5, 6, 7],
+      correct: [1, 2, 3, 4, 5]
+    });
+    if (abortFlag) return;
+
+    // —— Act 4: reaction + aha ——
+    if (result.perfect) {
+      setOrbState('is-celebrating');
+      await phraseSnap([
+        { html: '<em>Perfect.</em>',           hold: 520 },
+        { html: '6 rămâne <em>afară</em>.',    hold: 800 }
+      ]);
+    } else {
+      setOrbState('is-confused');
+      await phraseSnap([
+        { html: 'Aproape.',                    hold: 420 },
+        { html: '6 rămâne <em>afară</em>.',    hold: 800 }
+      ]);
+    }
+    topLine.classList.remove('is-visible');
+    topLine.innerHTML = '';
+    await sleep(260);
+    await aha();
+  }
+
+  /* Tap-to-Discover card game.
+     opts.cards   — numbers to render as cards (in order)
+     opts.correct — numbers the user must tap (any order)
+     Resolves with { perfect: boolean, mistakes: number } when all correct
+     cards have been captured. */
+  function runCards(opts) {
+    return new Promise((resolve) => {
+      const cards   = opts.cards;
+      const correct = new Set(opts.correct);
+      const needed  = correct.size;
+
+      cardsPrompt.innerHTML = opts.prompt;
+      cardsGrid.innerHTML = '';
+      basketSlots.innerHTML = '';
+      cardsBasket.classList.remove('is-full');
+
+      const cardEls = cards.map(n => {
+        const c = document.createElement('button');
+        c.type = 'button';
+        c.className = 'card';
+        c.dataset.num = String(n);
+        c.innerHTML = `<span class="num">${n}</span>`;
+        cardsGrid.appendChild(c);
+        return c;
+      });
+
+      // Basket slots in ascending order; show comma between, not before first.
+      const correctSorted = [...correct].sort((a, b) => a - b);
+      const slotEls = correctSorted.map((n, i) => {
+        const s = document.createElement('span');
+        s.className = 'slot';
+        s.dataset.num = String(n);
+        s.textContent = (i === 0 ? '' : ', ') + n;
+        basketSlots.appendChild(s);
+        return s;
+      });
+
+      cardsPanel.classList.add('is-visible');
+
+      let captured = 0;
+      let mistakes = 0;
+
+      const flyToBasket = (cardEl, num) => {
+        const r  = cardEl.getBoundingClientRect();
+        const target = slotEls.find(s => Number(s.dataset.num) === num);
+        const tr = target.getBoundingClientRect();
+        const flyer = document.createElement('div');
+        flyer.className = 'flying-num';
+        flyer.textContent = String(num);
+        flyer.style.left = `${r.left + r.width/2 - 12}px`;
+        flyer.style.top  = `${r.top  + r.height/2 - 12}px`;
+        document.body.appendChild(flyer);
+        const dx = (tr.left + tr.width/2) - (r.left + r.width/2);
+        const dy = (tr.top  + tr.height/2) - (r.top  + r.height/2);
+        const anim = flyer.animate([
+          { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+          { transform: `translate(${dx*0.5}px, ${dy*0.5 - 30}px) scale(1.4)`, opacity: 1, offset: 0.55 },
+          { transform: `translate(${dx}px, ${dy}px) scale(.6)`, opacity: 0 }
+        ], { duration: 560, easing: 'cubic-bezier(.32,0,.4,1)' });
+        anim.onfinish = () => {
+          flyer.remove();
+          target.classList.add('is-in');
+        };
+        sparkBurstAt(r.left + r.width/2, r.top + r.height/2, 6);
+      };
+
+      const onTap = (ev) => {
+        const cardEl = ev.currentTarget;
+        if (cardEl.classList.contains('is-captured') || cardEl.classList.contains('is-rejected')) return;
+        const n = Number(cardEl.dataset.num);
+        if (correct.has(n)) {
+          cardEl.classList.add('is-captured');
+          playSound('cardCapture');
+          flyToBasket(cardEl, n);
+          captured++;
+          if (captured === needed) {
+            cardsBasket.classList.add('is-full');
+            cardEls.forEach(c => c.removeEventListener('click', onTap));
+            setTimeout(() => {
+              cardsPanel.classList.remove('is-visible');
+              setTimeout(() => resolve({ perfect: mistakes === 0, mistakes }), 320);
+            }, 540);
+          }
+        } else {
+          mistakes++;
+          cardEl.classList.add('is-rejected');
+          playSound('cardReject');
+          setTimeout(() => cardEl.classList.remove('is-rejected'), 380);
+        }
+      };
+
+      cardEls.forEach(c => c.addEventListener('click', onTap));
+    });
+  }
+
+  async function runSpanish() {
+    setOrbState('is-thinking');
+    await phraseSnap([
+      { html: '<em>5 fraze</em>.',         hold: 460 },
+      { html: 'Le folosești <em>mâine</em>.', hold: 700 }
+    ]);
+
+    // Word flash with per-word Spanish voice
+    setOrbState('is-speaking');
+    topLine.classList.remove('is-snap', 'is-visible');
+    topLine.innerHTML = '';
+    await wordFlashVoiced([
+      { word: 'hola',            gloss: 'salut',         lang: 'es-ES' },
+      { word: '¿cuánto cuesta?', gloss: 'cât costă?',    lang: 'es-ES' },
+      { word: 'gracias',         gloss: 'mulțumesc',     lang: 'es-ES' },
+      { word: 'la cuenta',       gloss: 'nota de plată', lang: 'es-ES' },
+      { word: 'perdón',          gloss: 'scuze',         lang: 'es-ES' }
+    ], { show: 640, gap: 160 });
+
+    setOrbState('is-thinking');
+    await phraseSnap([
+      { html: 'Una e <em>cheia</em>.',  hold: 540 },
+      { html: 'Vrei <em>prețul</em>?',  hold: 600 },
+      { html: '<em>Ce zici</em>?',      hold: 600 }
+    ]);
+    topLine.classList.remove('is-visible');
+    topLine.innerHTML = '';
+
+    const correct = await ask(
+      'Cum întrebi <code>"cât costă?"</code> în spaniolă',
+      ['¿Cuánto cuesta?', 'La cuenta', '¿Cómo estás?'],
+      0
+    );
+    if (abortFlag) return;
+
+    if (correct) {
+      setOrbState('is-celebrating');
+      await phraseSnap([
+        { html: '<em>Bravo.</em>',                 hold: 500 },
+        { html: 'Funcționează <em>oriunde</em>.',  hold: 800 }
+      ]);
+    } else {
+      setOrbState('is-confused');
+      await phraseSnap([
+        { html: 'Aproape.',                                hold: 420 },
+        { html: '<em>¿cuánto cuesta?</em>', hold: 800, lang: 'es-ES' }
+      ]);
+    }
+    topLine.classList.remove('is-visible');
+    topLine.innerHTML = '';
+    await sleep(260);
+    await aha();
+  }
+
+  /* Word-flash with audio cue. Each word appears, plays 'wordFlash' SFX. */
+  async function wordFlashVoiced(items, opts = {}) {
+    const show = opts.show ?? 600;
+    const gap  = opts.gap  ?? 140;
+    flashHost.hidden = false;
+    flashHost.innerHTML = '';
+    for (const it of items) {
+      if (abortFlag) return;
+      const el = document.createElement('div');
+      el.className = 'word';
+      el.innerHTML = `${escapeHtml(it.word)}<span class="gloss">${escapeHtml(it.gloss)}</span>`;
+      flashHost.appendChild(el);
+      el.offsetHeight;
+      el.classList.add('is-in');
+      playSound('wordFlash');
+      await sleep(show);
+      el.classList.remove('is-in');
+      await sleep(gap);
+      el.remove();
+    }
+    flashHost.hidden = true;
+  }
+
+  async function runCompound() {
+    setOrbState('is-thinking');
+    await phraseSnap([
+      { html: 'Cea mai <em>tare</em> forță.',  hold: 540 },
+      { html: 'Financiară.',                    hold: 460 },
+      { html: 'Uite formula.',                  hold: 500 }
+    ]);
+
+    setOrbState('is-speaking');
+    typeCode([
+      { tok: 'com', text: '# compound interest\n' },
+      { tok: 'fn',  text: 'final' },
+      { tok: 'pl',  text: ' = ' },
+      { tok: 'pl',  text: 'principal' },
+      { tok: 'pl',  text: ' * ' },
+      { tok: 'pl',  text: '(' },
+      { tok: 'num', text: '1' },
+      { tok: 'pl',  text: ' + ' },
+      { tok: 'pl',  text: 'rate' },
+      { tok: 'pl',  text: ') ** ' },
+      { tok: 'pl',  text: 'years' }
+    ], 170);
+
+    await phraseSnap([
+      { html: '<em>$1000</em>.',          hold: 460 },
+      { html: '7% pe an.',                hold: 460 },
+      { html: '<em>10 ani</em>.',         hold: 540 },
+      { html: 'Ghicește.',                hold: 540 }
+    ]);
+
+    codePanel.classList.remove('is-visible');
+    await sleep(240);
+    codePanel.innerHTML = '';
+    topLine.classList.remove('is-visible');
+    topLine.innerHTML = '';
+
+    const correct = await ask(
+      'Cât devin $1000 la 7%/an, după 10 ani',
+      ['~$1,970', '~$1,700', '~$2,500'],
+      0
+    );
+    if (abortFlag) return;
+
+    if (correct) {
+      setOrbState('is-celebrating');
+      await phraseSnap([
+        { html: '<em>Aproape dublu.</em>',         hold: 600 },
+        { html: 'Și n-ai făcut <em>nimic</em>.',   hold: 800 }
+      ]);
+    } else {
+      setOrbState('is-confused');
+      await phraseSnap([
+        { html: 'Răspunsul: <em>$1970</em>.',      hold: 700 },
+        { html: 'Aproape <em>dublu</em>.',         hold: 700 }
+      ]);
+    }
+    topLine.classList.remove('is-visible');
+    topLine.innerHTML = '';
+    await sleep(260);
+    await aha();
+  }
+
+  /* Render a multiple-choice question and resolve to true if user picks
+     the correct option. */
+  function ask(promptHtml, options, correctIdx) {
+    return new Promise((resolve) => {
+      quizPrompt.innerHTML = promptHtml;
+      quizOpts.forEach((btn, i) => {
+        btn.textContent = options[i] ?? '';
+        btn.disabled = false;
+        btn.classList.remove('is-correct', 'is-wrong');
+        btn.style.display = (options[i] == null) ? 'none' : '';
+      });
+      quizPanel.classList.add('is-visible');
+
+      const onPick = async (ev) => {
+        const i = parseInt(ev.currentTarget.dataset.opt, 10);
+        quizOpts.forEach(b => b.disabled = true);
+        if (i === correctIdx) {
+          ev.currentTarget.classList.add('is-correct');
+        } else {
+          ev.currentTarget.classList.add('is-wrong');
+          quizOpts[correctIdx].classList.add('is-correct');
+        }
+        await sleep(900);
+        quizPanel.classList.remove('is-visible');
+        await sleep(300);
+        // cleanup handlers
+        quizOpts.forEach(b => b.removeEventListener('click', onPick));
+        resolve(i === correctIdx);
+      };
+      quizOpts.forEach(b => b.addEventListener('click', onPick));
+    });
+  }
+
+  async function aha() {
+    setOrbState('is-celebrating');
+    ahaPanel.classList.add('is-visible');
+    playSound('aha', { volume: 0.7 });
+    sparkBurst(orb);
+    await sleep(1800);
+  }
+
+  /* Sparkle burst centered at an arbitrary (x, y) point. */
+  function sparkBurstAt(cx, cy, count) {
+    const n = count ?? 10;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('div');
+      s.className = 'spark';
+      s.style.left = `${cx}px`;
+      s.style.top  = `${cy}px`;
+      document.body.appendChild(s);
+      const angle = (i / n) * Math.PI * 2 + Math.random()*0.6;
+      const dist  = 30 + Math.random()*40;
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist;
+      const dur = 500 + Math.random()*250;
+      s.animate([
+        { transform: 'translate(0,0) scale(.6)', opacity: 0 },
+        { transform: 'translate(0,0) scale(1)',  opacity: 1, offset: .15 },
+        { transform: `translate(${dx}px, ${dy}px) scale(.4)`, opacity: 0 }
+      ], { duration: dur, easing: 'cubic-bezier(.2,.7,.3,1)' });
+      setTimeout(() => s.remove(), dur + 50);
+    }
+  }
+
+  /* Tiny sparkle burst around the orb at aha moment. */
+  function sparkBurst(target) {
+    const rect = target.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top  + rect.height / 2;
+    const n = 14;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('div');
+      s.className = 'spark';
+      s.style.left = `${cx}px`;
+      s.style.top  = `${cy}px`;
+      document.body.appendChild(s);
+      const angle = (i / n) * Math.PI * 2 + Math.random()*0.4;
+      const dist  = 80 + Math.random()*60;
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist;
+      const dur = 700 + Math.random()*400;
+      s.animate([
+        { transform: 'translate(0,0) scale(.6)', opacity: 0 },
+        { transform: 'translate(0,0) scale(1)', opacity: 1, offset: .15 },
+        { transform: `translate(${dx}px, ${dy}px) scale(.4)`, opacity: 0 }
+      ], { duration: dur, easing: 'cubic-bezier(.2,.7,.3,1)' });
+      setTimeout(() => s.remove(), dur + 50);
+    }
+  }
+
+  // ── Topic dispatch ───────────────────────────────────────
+  const topicScripts = {
+    'python-for':        runPython,
+    'spanish-travel':    runSpanish,
+    'compound-interest': runCompound
+  };
+
+  async function startTopic(topic) {
+    abortFlag = false;
+    currentTopic = topic;
+    hideAllBottom();
+    flashHost.innerHTML = '';
+    flashHost.hidden = true;
+    setOrbState('is-listening');
+    await sleep(300);
+    const run = topicScripts[topic];
+    if (run) await run();
+  }
+
+  function restart() {
+    abortFlag = true;
+    stopSpeak();
+    // give in-flight animations a beat to bail
+    setTimeout(() => {
+      abortFlag = false;
+      setOrbState(null);
+      hideAllBottom();
+      flashHost.innerHTML = '';
+      flashHost.hidden = true;
+      codePanel.innerHTML = '';
+      topLine.className = 'cinema-line';
+      topLine.innerHTML = '';
+      bottomLine.innerHTML = '';
+      cardsGrid.innerHTML = '';
+      basketSlots.innerHTML = '';
+      pickPanel.classList.remove('is-hidden');
+    }, 100);
+  }
+
+  // ── Wire up ──────────────────────────────────────────────
+  document.querySelectorAll('.cinema-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = btn.dataset.topic;
+      startTopic(t);
+    });
+  });
+  restartBtn.addEventListener('click', restart);
+  nextBtn.addEventListener('click', restart);
+  muteBtn.addEventListener('click', toggleMute);
+  applyMuteUI();
+
+  // Pause speech when tab hidden (mobile lock-screen friendly)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopSpeak();
+  });
+
+  // ── Embers (lightweight, optional) ───────────────────────
+  // Tiny gold particles floating up; matches main app's background mood.
+  (() => {
+    const canvas = document.getElementById('embersCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let W, H, particles;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return;
+
+    function resize() {
+      W = canvas.width  = window.innerWidth  * devicePixelRatio;
+      H = canvas.height = window.innerHeight * devicePixelRatio;
+      canvas.style.width  = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+    }
+    function spawn() {
+      return {
+        x: Math.random() * W,
+        y: H + Math.random() * H * 0.3,
+        vx: (Math.random()-0.5) * 0.3 * devicePixelRatio,
+        vy: -(0.3 + Math.random()*0.8) * devicePixelRatio,
+        r: (0.7 + Math.random()*1.6) * devicePixelRatio,
+        life: 0,
+        max: 6 + Math.random()*8
+      };
+    }
+    function init() {
+      resize();
+      particles = Array.from({ length: 36 }, spawn);
+    }
+    function tick() {
+      ctx.clearRect(0, 0, W, H);
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life += 1/60;
+        const fade = Math.max(0, 1 - p.life / p.max);
+        if (p.y < -10 || p.life > p.max) Object.assign(p, spawn());
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(239, 221, 141, ${0.18 * fade})`;
+        ctx.fill();
+      }
+      requestAnimationFrame(tick);
+    }
+    window.addEventListener('resize', resize);
+    init();
+    tick();
+  })();
+
+})();
+</script>
+</body>
+</html>
