@@ -1,0 +1,1456 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Wispucci — Cinema 3D (Particle Orb + Window Scene)</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./style.css?v=28" />
+
+<style>
+/* ===========================================================================
+   CINEMA 3D DEMO — Particle Orb + Window Scenes (prototype)
+   Reuses Wispucci design tokens from style.css. Self-contained layout.
+=========================================================================== */
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg-base, #210124);
+  color: var(--text, #F4FDAF);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Three.js canvas covers the screen behind DOM overlay. */
+#scene-3d {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* ─── Overlay: magazine spread + notes + wayfinding ───────── */
+.c3d-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: auto 1fr auto;
+  gap: 0;
+  padding: 24px;
+}
+
+.c3d-overlay > * { pointer-events: auto; }
+
+/* ─── Top: act wayfinding bar ─────────────────────────────── */
+.c3d-actbar {
+  grid-column: 1 / 3;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 8px;
+  pointer-events: none;
+}
+.c3d-actbar .step {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 6px 12px;
+  border: 1px solid rgba(101, 116, 58, 0.32);
+  border-radius: 999px;
+  background: rgba(42, 9, 48, 0.45);
+  backdrop-filter: blur(6px);
+  transition: color .35s ease, border-color .35s ease, background .35s ease, transform .35s ease;
+}
+.c3d-actbar .step.is-active {
+  color: var(--accent);
+  border-color: rgba(239, 221, 141, 0.55);
+  background: rgba(239, 221, 141, 0.08);
+  transform: scale(1.04);
+  box-shadow: 0 0 24px rgba(239, 221, 141, 0.16);
+}
+.c3d-actbar .step.is-done {
+  color: var(--text-2);
+  border-color: rgba(201, 184, 106, 0.32);
+}
+.c3d-actbar .sep {
+  width: 28px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line, #65743A), transparent);
+}
+
+/* ─── Magazine spread phrase anchors (NW, N, CENTER, SE, SW) */
+.c3d-phrases {
+  grid-column: 1;
+  grid-row: 2;
+  position: relative;
+  pointer-events: none;
+}
+.c3d-phrase {
+  position: absolute;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--text-2);
+  letter-spacing: -.01em;
+  line-height: 1.05;
+  opacity: 0;
+  white-space: nowrap;
+  max-width: 92vw;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.4));
+  pointer-events: none;
+  transform-origin: center;
+}
+.c3d-phrase em { color: var(--accent-soft); font-style: italic; }
+.c3d-phrase.is-active {
+  color: var(--accent-soft);
+  text-shadow: 0 0 24px rgba(239, 221, 141, 0.18);
+}
+.c3d-phrase.is-active::after {
+  content: '';
+  position: absolute;
+  left: 6%; right: 6%;
+  bottom: -10px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  border-radius: 2px;
+  filter: drop-shadow(0 0 6px rgba(239, 221, 141, 0.6));
+}
+.c3d-phrase.is-dim { color: var(--text-3); opacity: .42 !important; }
+
+/* Anchor positions — desktop magazine spread.
+   'c' sits BELOW the orb (matching the magazine mockup), not on top of it. */
+.c3d-phrase[data-anchor="tl"] { top: 4%;    left: 4%;   transform-origin: top left; }
+.c3d-phrase[data-anchor="t"]  { top: 6%;    left: 42%;  transform: translateX(-50%); }
+.c3d-phrase[data-anchor="c"]  { top: 78%;   left: 42%;  transform: translate(-50%, -50%); text-align: center; }
+.c3d-phrase[data-anchor="br"] { bottom: 6%; right: 4%;  transform-origin: bottom right; text-align: right; }
+.c3d-phrase[data-anchor="bl"] { bottom: 10%; left: 4%; }
+.c3d-phrase[data-anchor="r"]  { top: 50%;   right: 4%;  transform: translateY(-50%); text-align: right; }
+
+/* Per-size variants */
+.c3d-phrase.size-xl { font-size: clamp(56px, 8vw, 120px); }
+.c3d-phrase.size-l  { font-size: clamp(36px, 5vw, 72px); }
+.c3d-phrase.size-m  { font-size: clamp(24px, 3.4vw, 44px); }
+.c3d-phrase.size-s  { font-size: clamp(18px, 2.2vw, 28px); }
+
+/* ─── Right: notes panel ──────────────────────────────────── */
+.c3d-notes {
+  grid-column: 2;
+  grid-row: 2 / 4;
+  align-self: stretch;
+  background: rgba(42, 9, 48, 0.66);
+  border: 1px solid rgba(101, 116, 58, 0.28);
+  border-radius: 14px;
+  padding: 18px 18px 22px;
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: calc(100vh - 100px);
+  overflow: hidden;
+  transform: translateX(120%);
+  opacity: 0;
+}
+.c3d-notes header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.c3d-notes header button {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 14px;
+}
+.c3d-notes h4 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--accent-deep);
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(101, 116, 58, 0.28);
+  padding-bottom: 6px;
+}
+.c3d-notes-block { display: flex; flex-direction: column; }
+.c3d-memo, .c3d-glos {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex; flex-direction: column;
+  gap: 6px;
+}
+.c3d-memo li, .c3d-glos li {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-2);
+  opacity: 0;
+  transform: translateY(6px);
+}
+.c3d-memo li::before {
+  content: '◆ ';
+  color: var(--accent);
+  font-size: 8px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.c3d-glos li { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.c3d-glos li b { color: var(--accent); font-weight: 600; margin-right: 8px; }
+.c3d-code {
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+  background: rgba(33, 1, 36, 0.55);
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(101, 116, 58, 0.18);
+  white-space: pre-wrap;
+}
+.c3d-code .line {
+  display: block;
+  opacity: .35;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: opacity .25s ease, background .25s ease, color .25s ease;
+}
+.c3d-code .line.is-typed { opacity: 1; }
+.c3d-code .line.is-running {
+  background: rgba(239, 221, 141, 0.14);
+  color: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.c3d-code .tok-kw  { color: #C792EA; }
+.c3d-code .tok-fn  { color: var(--accent); }
+.c3d-code .tok-num { color: #F78C6C; }
+.c3d-code .tok-com { color: var(--text-3); font-style: italic; }
+.c3d-progress {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+.c3d-progress .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(101, 116, 58, 0.32);
+  transition: background .3s ease, transform .3s ease;
+}
+.c3d-progress .dot.is-active { background: var(--accent); transform: scale(1.3); }
+.c3d-progress .dot.is-done { background: var(--accent-deep); }
+
+/* ─── Center: wayfinding arrow + task area ────────────────── */
+.c3d-pointer {
+  position: fixed;
+  z-index: 6;
+  pointer-events: none;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 22px;
+  color: var(--accent);
+  opacity: 0;
+  filter: drop-shadow(0 0 12px rgba(239, 221, 141, 0.55));
+}
+
+/* ─── Bottom: cards/quiz mini area (act 3) ────────────────── */
+.c3d-task {
+  grid-column: 1;
+  grid-row: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding-top: 18px;
+  min-height: 0;
+}
+.c3d-task .prompt {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(20px, 2.4vw, 28px);
+  color: var(--text);
+  opacity: 0;
+}
+.c3d-task .prompt code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85em;
+  color: var(--accent);
+  background: rgba(239, 221, 141, 0.08);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.c3d-cards {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.c3d-card {
+  width: 54px;
+  height: 72px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, rgba(52, 15, 60, 0.85), rgba(33, 1, 36, 0.85));
+  border: 1px solid rgba(239, 221, 141, 0.25);
+  color: var(--accent-soft);
+  font-family: 'Instrument Serif', serif;
+  font-size: 30px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+  opacity: 0;
+  transform: translateY(20px) scale(.9);
+}
+.c3d-card:hover {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 12px 32px rgba(239, 221, 141, 0.2);
+  border-color: var(--accent);
+}
+.c3d-card.is-correct {
+  background: linear-gradient(160deg, rgba(101, 116, 58, 0.4), rgba(239, 221, 141, 0.18));
+  border-color: var(--accent);
+  pointer-events: none;
+  animation: cardCorrect .4s ease;
+}
+.c3d-card.is-wrong {
+  border-color: #d34;
+  animation: cardWrong .35s ease;
+}
+.c3d-card.is-flying {
+  pointer-events: none;
+}
+@keyframes cardCorrect {
+  0%   { transform: translateY(-4px) scale(1.05); }
+  40%  { transform: translateY(-10px) scale(1.15); box-shadow: 0 16px 40px rgba(239, 221, 141, 0.5); }
+  100% { transform: translateY(-4px) scale(1.05); }
+}
+@keyframes cardWrong {
+  0%, 100% { transform: translateY(-4px) scale(1.05); }
+  25%      { transform: translateY(-4px) translateX(-6px) scale(1.05); }
+  75%      { transform: translateY(-4px) translateX(6px) scale(1.05); }
+}
+
+/* ─── Dev jump bar (bottom-right, fixed) ──────────────────── */
+.c3d-dev {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10;
+  display: flex;
+  gap: 6px;
+  background: rgba(33, 1, 36, 0.85);
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(101, 116, 58, 0.32);
+}
+.c3d-dev button {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-2);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.c3d-dev button:hover {
+  background: rgba(239, 221, 141, 0.08);
+  color: var(--accent-soft);
+  border-color: rgba(239, 221, 141, 0.32);
+}
+
+/* ─── Aha overlay ─────────────────────────────────────────── */
+.c3d-aha {
+  position: fixed;
+  inset: 0;
+  z-index: 7;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+}
+.c3d-aha .xp {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(60px, 10vw, 140px);
+  font-style: italic;
+  color: var(--accent);
+  text-shadow: 0 0 60px rgba(239, 221, 141, 0.4);
+}
+.c3d-aha .lbl {
+  position: absolute;
+  margin-top: 200px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: var(--accent-soft);
+  text-transform: uppercase;
+}
+
+/* ─── Mobile: stack everything ────────────────────────────── */
+@media (max-width: 768px) {
+  .c3d-overlay {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto auto;
+    padding: 14px;
+  }
+  .c3d-actbar { grid-column: 1; }
+  .c3d-phrases { grid-row: 2; }
+  .c3d-notes {
+    grid-column: 1;
+    grid-row: 4;
+    max-height: 28vh;
+    transform: translateY(40%);
+  }
+  .c3d-task { grid-row: 3; }
+  .c3d-phrase[data-anchor="tl"] { top: 8%; left: 6%; }
+  .c3d-phrase[data-anchor="c"]  { top: 38%; }
+  .c3d-phrase[data-anchor="br"] { bottom: 38vh; right: 6%; }
+  .c3d-phrase.size-xl { font-size: clamp(42px, 12vw, 64px); }
+  .c3d-phrase.size-l  { font-size: clamp(28px, 8vw, 44px); }
+  .c3d-card { width: 44px; height: 60px; font-size: 24px; }
+}
+</style>
+</head>
+<body>
+
+<!-- 3D scene canvas (Three.js mounts here) -->
+<canvas id="scene-3d"></canvas>
+
+<!-- DOM overlay: magazine spread + wayfinding + notes -->
+<div class="c3d-overlay">
+
+  <!-- Top: act wayfinding bar -->
+  <div class="c3d-actbar" id="actbar">
+    <span class="step" data-act="1">АКТ 1 · УЗНАЁМ</span>
+    <span class="sep"></span>
+    <span class="step" data-act="2">АКТ 2 · ТВОЙ ХОД</span>
+    <span class="sep"></span>
+    <span class="step" data-act="3">АКТ 3 · AHA</span>
+  </div>
+
+  <!-- Phrases (magazine spread anchors) -->
+  <div class="c3d-phrases" id="phrases"></div>
+
+  <!-- Notes panel -->
+  <aside class="c3d-notes" id="notes">
+    <header>
+      <span>NOTES · персональный конспект</span>
+      <button id="notesToggle" title="свернуть">▾</button>
+    </header>
+
+    <section class="c3d-notes-block">
+      <h4>ЗАПОМНИ</h4>
+      <ul class="c3d-memo" id="memoList"></ul>
+    </section>
+
+    <section class="c3d-notes-block">
+      <h4>КОД</h4>
+      <pre class="c3d-code" id="codeNotes"></pre>
+    </section>
+
+    <section class="c3d-notes-block">
+      <h4>GLOSAR</h4>
+      <ul class="c3d-glos" id="glosList"></ul>
+    </section>
+
+    <div class="c3d-progress" id="progress">
+      <span class="dot" data-act="1"></span>
+      <span class="dot" data-act="2"></span>
+      <span class="dot" data-act="3"></span>
+    </div>
+  </aside>
+
+  <!-- Task area: cards / quiz appears here in Act 2 -->
+  <div class="c3d-task" id="taskArea">
+    <div class="prompt" id="taskPrompt"></div>
+    <div class="c3d-cards" id="cardsGrid"></div>
+  </div>
+
+</div>
+
+<!-- Wayfinding pointer (animated arrow that appears before tasks) -->
+<div class="c3d-pointer" id="pointer">↓ tap aici</div>
+
+<!-- Aha overlay -->
+<div class="c3d-aha" id="ahaOverlay">
+  <span class="xp">+12 <em>XP</em></span>
+  <span class="lbl">aha · loop unlocked</span>
+</div>
+
+<!-- Dev jump bar -->
+<div class="c3d-dev">
+  <button data-jump="1">1·intro</button>
+  <button data-jump="2">2·code</button>
+  <button data-jump="3">3·quiz</button>
+  <button data-jump="4">4·aha</button>
+  <button id="replay">↺ replay</button>
+</div>
+
+<!-- GSAP (same version as index.html) -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+
+<!-- Three.js as module -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ===========================================================================
+   CINEMA 3D DEMO — Particle Orb + Window Scene
+   ─────────────────────────────────────────────────────────────────────────
+   Stack:
+     • Three.js (CDN, module) — particle cloud + small window scene
+     • GSAP                   — phrase entries, particle morph timing, ui
+     • Vanilla DOM            — magazine-spread overlay (no React)
+   Theme reused: Loops / for i in range(1, 6): print(i)
+=========================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const lerp  = (a, b, t) => a + (b - a) * t;
+
+// ─────────────────────────────────────────────────────────────────────
+// 1.  Three.js scene setup
+// ─────────────────────────────────────────────────────────────────────
+const canvas = $('scene-3d');
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true,
+  alpha: true,
+  powerPreference: 'high-performance'
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x210124, 1);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x210124, 0.05);
+
+const camera = new THREE.PerspectiveCamera(
+  42,
+  window.innerWidth / window.innerHeight,
+  0.1, 50
+);
+camera.position.set(0, 0, 5.2);
+
+// Lights for inner window-scene mesh.
+scene.add(new THREE.AmbientLight(0xF4FDAF, 0.55));
+const key = new THREE.DirectionalLight(0xFFFFD9, 0.75);
+key.position.set(2, 3, 4);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xC9B86A, 0.45);
+rim.position.set(-3, -1, 2);
+scene.add(rim);
+
+// Orb anchor — particles + window-scene live under this group.
+const orbGroup = new THREE.Group();
+scene.add(orbGroup);
+
+// ─────────────────────────────────────────────────────────────────────
+// 2.  Shape target generators (each returns Float32Array of N * 3)
+// ─────────────────────────────────────────────────────────────────────
+const N = 2400;            // particle count
+const ORB_RADIUS = 1.05;
+const jitter = () => (Math.random() - 0.5) * 0.06;
+
+function shapeSphere() {
+  // Fibonacci sphere — even distribution on a unit sphere surface.
+  const a = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i / (N - 1)) * 2;          // y from 1 → -1
+    const r = Math.sqrt(1 - y * y);
+    const t = i * Math.PI * (3 - Math.sqrt(5));
+    a[i * 3]     = Math.cos(t) * r * ORB_RADIUS + jitter();
+    a[i * 3 + 1] = y * ORB_RADIUS + jitter();
+    a[i * 3 + 2] = Math.sin(t) * r * ORB_RADIUS + jitter();
+  }
+  return a;
+}
+
+function shapeInfinity() {
+  // Lemniscate of Bernoulli, extruded slightly in Z for depth.
+  const a = new Float32Array(N * 3);
+  const scale = 1.55;
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    const d = 1 + Math.sin(t) * Math.sin(t);
+    const x = (Math.cos(t) / d) * scale;
+    const y = (Math.sin(t) * Math.cos(t) / d) * scale;
+    a[i * 3]     = x + jitter();
+    a[i * 3 + 1] = y + jitter();
+    a[i * 3 + 2] = (Math.random() - 0.5) * 0.18;
+  }
+  return a;
+}
+
+function shapeHeart() {
+  // Classic heart curve, normalised + slight Z scatter.
+  const a = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    const x = 16 * Math.pow(Math.sin(t), 3);
+    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+    a[i * 3]     = x * 0.075 + jitter();
+    a[i * 3 + 1] = y * 0.075 + jitter() + 0.05;
+    a[i * 3 + 2] = (Math.random() - 0.5) * 0.18;
+  }
+  return a;
+}
+
+function shapeArrow() {
+  // Diagonal ↗ arrow: shaft + head, particles distributed along segments.
+  const a = new Float32Array(N * 3);
+  const tip   = [0.9,  0.9, 0];
+  const tail  = [-0.9, -0.9, 0];
+  const headA = [0.3,  0.9, 0];
+  const headB = [0.9,  0.3, 0];
+  const shaftN = Math.floor(N * 0.65);
+  const fillSegment = (i, A, B) => {
+    const t = Math.random();
+    a[i * 3]     = lerp(A[0], B[0], t) + jitter();
+    a[i * 3 + 1] = lerp(A[1], B[1], t) + jitter();
+    a[i * 3 + 2] = (Math.random() - 0.5) * 0.12;
+  };
+  for (let i = 0; i < shaftN; i++) fillSegment(i, tail, tip);
+  const headEach = Math.floor((N - shaftN) / 2);
+  for (let i = 0; i < headEach; i++) fillSegment(shaftN + i, tip, headA);
+  for (let i = shaftN + headEach; i < N; i++) fillSegment(i, tip, headB);
+  return a;
+}
+
+function shapeRange() {
+  // 5 small clusters in a row — the literal {1,2,3,4,5}.
+  const a = new Float32Array(N * 3);
+  const groups = 5;
+  const groupRadius = 0.22;
+  const spacing = 0.46;
+  const xOffset = -spacing * (groups - 1) / 2;
+  const perGroup = Math.floor(N / groups);
+  for (let g = 0; g < groups; g++) {
+    const cx = xOffset + g * spacing;
+    const start = g * perGroup;
+    const end = (g === groups - 1) ? N : start + perGroup;
+    for (let i = start; i < end; i++) {
+      // disk in xy
+      const r = Math.sqrt(Math.random()) * groupRadius;
+      const a2 = Math.random() * Math.PI * 2;
+      a[i * 3]     = cx + Math.cos(a2) * r + jitter();
+      a[i * 3 + 1] = Math.sin(a2) * r + jitter();
+      a[i * 3 + 2] = (Math.random() - 0.5) * 0.15;
+    }
+  }
+  return a;
+}
+
+function shapeLightbulb() {
+  // Bulb body (circle) + neck (rect) + filament dots in centre.
+  const a = new Float32Array(N * 3);
+  const bulbN = Math.floor(N * 0.78);
+  for (let i = 0; i < bulbN; i++) {
+    // Disk on bulb plus slight 3D
+    const r = Math.sqrt(Math.random()) * 0.75;
+    const t = Math.random() * Math.PI * 2;
+    a[i * 3]     = Math.cos(t) * r + jitter();
+    a[i * 3 + 1] = Math.sin(t) * r + 0.15 + jitter();
+    a[i * 3 + 2] = (Math.random() - 0.5) * 0.35;
+  }
+  // Base/neck — rectangle below bulb
+  for (let i = bulbN; i < N; i++) {
+    a[i * 3]     = (Math.random() - 0.5) * 0.45;
+    a[i * 3 + 1] = -0.85 + (Math.random() - 0.5) * 0.35;
+    a[i * 3 + 2] = (Math.random() - 0.5) * 0.18;
+  }
+  return a;
+}
+
+function shapeExplode() {
+  // Burst — distant random shell, used for aha celebration.
+  const a = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    // Random direction × random distance (0.8 - 3.5)
+    const u = Math.random() * 2 - 1;
+    const t = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(1 - u * u);
+    const d = 0.9 + Math.random() * 2.6;
+    a[i * 3]     = Math.cos(t) * r * d;
+    a[i * 3 + 1] = u * d;
+    a[i * 3 + 2] = Math.sin(t) * r * d;
+  }
+  return a;
+}
+
+const SHAPES = {
+  sphere:     shapeSphere(),
+  infinity:   shapeInfinity(),
+  heart:      shapeHeart(),
+  arrow:      shapeArrow(),
+  range:      shapeRange(),
+  lightbulb:  shapeLightbulb(),
+  explode:    shapeExplode()
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// 3.  Particle geometry — start at sphere, animate target shape.
+// ─────────────────────────────────────────────────────────────────────
+const startPositions = new Float32Array(SHAPES.sphere);   // current frame
+const fromPositions  = new Float32Array(SHAPES.sphere);   // shape we are leaving
+const toPositions    = new Float32Array(SHAPES.sphere);   // shape we are heading to
+
+const geometry = new THREE.BufferGeometry();
+geometry.setAttribute('position', new THREE.BufferAttribute(startPositions, 3));
+
+// Slight per-particle scale variation through a colour-like aAlpha attribute.
+const sizes = new Float32Array(N);
+for (let i = 0; i < N; i++) sizes[i] = 0.6 + Math.random() * 0.8;
+geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+
+// Simple soft-disc PointsMaterial. Additive blending gives the glow.
+function makeDiscTexture(size = 128) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0,    'rgba(255,255,217,1)');
+  g.addColorStop(0.25, 'rgba(239,221,141,0.9)');
+  g.addColorStop(0.55, 'rgba(201,184,106,0.35)');
+  g.addColorStop(1,    'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const pointTex = makeDiscTexture();
+
+const material = new THREE.PointsMaterial({
+  size: 0.07,
+  map: pointTex,
+  transparent: true,
+  alphaTest: 0.02,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  color: 0xEFDD8D,
+  sizeAttenuation: true
+});
+
+const particles = new THREE.Points(geometry, material);
+orbGroup.add(particles);
+
+// ─────────────────────────────────────────────────────────────────────
+// 4.  Window scene — small 3D vignette nested inside the orb (Loops theme)
+//     • torus = the loop body
+//     • iterator sphere orbits it → highlights next code line per pass
+// ─────────────────────────────────────────────────────────────────────
+const windowScene = new THREE.Group();
+windowScene.visible = false;
+windowScene.scale.setScalar(0.6);
+orbGroup.add(windowScene);
+
+const torus = new THREE.Mesh(
+  new THREE.TorusGeometry(0.45, 0.085, 24, 80),
+  new THREE.MeshStandardMaterial({
+    color: 0xC9B86A,
+    emissive: 0x65743A,
+    emissiveIntensity: 0.4,
+    roughness: 0.45,
+    metalness: 0.4
+  })
+);
+torus.rotation.x = Math.PI * 0.32;
+windowScene.add(torus);
+
+const iterator = new THREE.Mesh(
+  new THREE.IcosahedronGeometry(0.085, 1),
+  new THREE.MeshStandardMaterial({
+    color: 0xFFFFD9,
+    emissive: 0xEFDD8D,
+    emissiveIntensity: 1.6,
+    roughness: 0.18,
+    metalness: 0.2
+  })
+);
+windowScene.add(iterator);
+
+// Halo behind the orb that subtly pulses with the speaking state.
+const halo = new THREE.Mesh(
+  new THREE.RingGeometry(1.35, 1.55, 64),
+  new THREE.MeshBasicMaterial({
+    color: 0xEFDD8D,
+    transparent: true,
+    opacity: 0.0,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide
+  })
+);
+halo.position.z = -0.5;
+orbGroup.add(halo);
+
+// ─────────────────────────────────────────────────────────────────────
+// 5.  Morph engine — interpolates particle positions to target shape.
+// ─────────────────────────────────────────────────────────────────────
+const morph = { progress: 1 };                  // 0 = at from, 1 = at to
+let activeShape = 'sphere';
+
+function setShape(name, opts = {}) {
+  if (!SHAPES[name]) return Promise.resolve();
+  // Capture current positions as new "from".
+  for (let i = 0; i < N * 3; i++) fromPositions[i] = startPositions[i];
+  // Set "to".
+  const target = SHAPES[name];
+  for (let i = 0; i < N * 3; i++) toPositions[i] = target[i];
+  // Animate progress 0 → 1.
+  morph.progress = 0;
+  activeShape = name;
+  return new Promise((resolve) => {
+    gsap.to(morph, {
+      progress: 1,
+      duration: opts.duration ?? 0.95,
+      ease: opts.ease ?? 'power3.inOut',
+      onComplete: resolve
+    });
+  });
+}
+
+// Apply morph each frame.
+const posAttr = geometry.getAttribute('position');
+function applyMorph() {
+  const p = morph.progress;
+  for (let i = 0; i < N * 3; i++) {
+    startPositions[i] = lerp(fromPositions[i], toPositions[i], p);
+  }
+  posAttr.needsUpdate = true;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 6.  Animation loop.
+// ─────────────────────────────────────────────────────────────────────
+let clock = new THREE.Clock();
+let iteratorAngle = 0;
+let orbState = 'thinking';     // thinking | speaking | listening | celebrating
+
+// "speaking" pulse — affects orb breath and halo opacity.
+const orbBreath = { v: 0 };
+function setOrbState(state) {
+  orbState = state;
+  // Halo opacity per state.
+  const haloOpacity = {
+    thinking: 0.04,
+    speaking: 0.18,
+    listening: 0.08,
+    celebrating: 0.32
+  }[state] ?? 0.05;
+  gsap.to(halo.material, { opacity: haloOpacity, duration: 0.6, ease: 'sine.out' });
+  // Particle size per state.
+  const pointSize = {
+    thinking: 0.07,
+    speaking: 0.085,
+    listening: 0.06,
+    celebrating: 0.11
+  }[state] ?? 0.07;
+  gsap.to(material, { size: pointSize, duration: 0.5, ease: 'sine.out' });
+}
+
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.06);
+  applyMorph();
+
+  // Orb gentle rotation — slower when listening, faster when celebrating.
+  const rotSpeed = {
+    thinking: 0.12,
+    speaking: 0.18,
+    listening: 0.05,
+    celebrating: 0.7
+  }[orbState] ?? 0.12;
+  orbGroup.rotation.y += rotSpeed * dt;
+  orbGroup.rotation.x = Math.sin(performance.now() * 0.0003) * 0.08;
+
+  // Breathing scale on "speaking" state.
+  const t = performance.now() * 0.0017;
+  const breath = orbState === 'speaking'
+    ? 1 + Math.sin(t * 4) * 0.025
+    : 1 + Math.sin(t * 1.5) * 0.012;
+  orbGroup.scale.setScalar(breath);
+
+  // Window-scene iterator orbit (when visible).
+  if (windowScene.visible) {
+    iteratorAngle += dt * 0.95;       // ~1 lap per ~6.5s
+    const a = iteratorAngle;
+    const orbitR = 0.45;
+    iterator.position.set(Math.cos(a) * orbitR, 0, Math.sin(a) * orbitR);
+    torus.rotation.z += dt * 0.4;
+  }
+
+  // Halo subtle rotation.
+  halo.rotation.z -= dt * 0.05;
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+frame();
+
+// Offset the orb leftward on desktop so it visually balances the right-side
+// notes panel. On mobile (panel docked at bottom) keep the orb centred.
+function applyOrbOffset() {
+  const isMobile = window.innerWidth <= 768;
+  orbGroup.position.x = isMobile ? 0 : -0.85;
+}
+applyOrbOffset();
+
+// Resize.
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  applyOrbOffset();
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// 7.  Window-scene loop sync → highlight code line on each iterator pass.
+//     The iterator "crosses" the front of the torus (a ≈ π/2 in our orbit)
+//     once per lap; we use that as the "tick" for advancing print(i).
+// ─────────────────────────────────────────────────────────────────────
+let lastTick = -1;
+function onIteratorTick(callback) {
+  // returns a small interval-based watcher (no extra rAF).
+  return setInterval(() => {
+    // 1 lap = 2π / 0.95 ≈ 6.6s — we just sample iteratorAngle mod 2π.
+    const phase = ((iteratorAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    const slot = Math.floor(phase / (Math.PI * 2 / 5));  // 0..4
+    if (slot !== lastTick) {
+      lastTick = slot;
+      callback(slot);
+    }
+  }, 80);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 8.  Magazine-spread phrase system (GSAP).
+// ─────────────────────────────────────────────────────────────────────
+const phrasesHost = $('phrases');
+const livePhrases = [];                 // history of currently-on-stage phrases
+
+function addPhrase({ html, anchor = 'c', size = 'l', tilt = 0, hold = 0 }) {
+  // Dim older phrases. Only the freshest stays `is-active` (gold underline).
+  livePhrases.forEach((p) => {
+    p.el.classList.add('is-dim');
+    p.el.classList.remove('is-active');
+  });
+
+  const el = document.createElement('div');
+  el.className = `c3d-phrase size-${size} is-active`;
+  el.dataset.anchor = anchor;
+  el.innerHTML = html;
+  phrasesHost.appendChild(el);
+
+  // Entrance: each anchor has its own direction.
+  const entryFrom = {
+    tl: { x: -120, y: -60, rotate: -8 },
+    t:  { x: 0,    y: -80, rotate: 0 },
+    c:  { x: 0,    y: 30,  rotate: 0 },
+    br: { x: 120,  y: 80,  rotate: 6 },
+    bl: { x: -120, y: 80,  rotate: -6 },
+    r:  { x: 120,  y: 0,   rotate: 4 }
+  }[anchor] || { x: 0, y: 30, rotate: 0 };
+
+  gsap.fromTo(el,
+    { opacity: 0, x: entryFrom.x, y: entryFrom.y, rotate: entryFrom.rotate + tilt, scale: 0.92 },
+    { opacity: 1, x: 0, y: 0, rotate: tilt, scale: 1, duration: 0.7, ease: 'expo.out' }
+  );
+
+  const handle = { el, anchor, hold };
+  livePhrases.push(handle);
+  return handle;
+}
+
+function clearPhrases(opts = {}) {
+  // "magClear": fly out all live phrases inward + fade.
+  const els = livePhrases.map((p) => p.el);
+  livePhrases.length = 0;
+  if (!els.length) return Promise.resolve();
+  return new Promise((resolve) => {
+    gsap.to(els, {
+      opacity: 0,
+      scale: 0.6,
+      y: '+=20',
+      stagger: 0.05,
+      duration: 0.4,
+      ease: 'power2.in',
+      onComplete: () => {
+        els.forEach((el) => el.remove());
+        resolve();
+      }
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 9.  Notes panel population + state.
+// ─────────────────────────────────────────────────────────────────────
+const memoList = $('memoList');
+const glosList = $('glosList');
+const codeNotes = $('codeNotes');
+const progressDots = document.querySelectorAll('#progress .dot');
+const actSteps = document.querySelectorAll('#actbar .step');
+
+function addMemo(text) {
+  const li = document.createElement('li');
+  li.innerHTML = text;
+  memoList.appendChild(li);
+  gsap.fromTo(li, { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.45, ease: 'expo.out' });
+}
+
+function addGlossary(term, def) {
+  const li = document.createElement('li');
+  li.innerHTML = `<b>${term}</b> ${def}`;
+  glosList.appendChild(li);
+  gsap.fromTo(li, { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.45, ease: 'expo.out' });
+}
+
+// Build the code block (Python) once. Per-line spans → we highlight per-iter.
+const codeLines = [
+  { spans: [{ tok: 'com', text: '# numerele 1 → 5' }] },
+  {
+    spans: [
+      { tok: 'kw',  text: 'for' },
+      { tok: 'pl',  text: ' i ' },
+      { tok: 'kw',  text: 'in' },
+      { tok: 'pl',  text: ' ' },
+      { tok: 'fn',  text: 'range' },
+      { tok: 'pl',  text: '(' },
+      { tok: 'num', text: '1' },
+      { tok: 'pl',  text: ', ' },
+      { tok: 'num', text: '6' },
+      { tok: 'pl',  text: '):' }
+    ]
+  },
+  {
+    spans: [
+      { tok: 'pl',  text: '    ' },
+      { tok: 'fn',  text: 'print' },
+      { tok: 'pl',  text: '(i)' }
+    ]
+  },
+  { spans: [{ tok: 'com', text: '#   i → 1' }] },
+  { spans: [{ tok: 'com', text: '#   i → 2' }] },
+  { spans: [{ tok: 'com', text: '#   i → 3' }] },
+  { spans: [{ tok: 'com', text: '#   i → 4' }] },
+  { spans: [{ tok: 'com', text: '#   i → 5' }] }
+];
+
+function renderCode() {
+  codeNotes.innerHTML = '';
+  codeLines.forEach((ln, idx) => {
+    const div = document.createElement('span');
+    div.className = 'line';
+    div.dataset.idx = idx;
+    ln.spans.forEach((s) => {
+      const sp = document.createElement('span');
+      sp.className = `tok-${s.tok}`;
+      sp.textContent = s.text;
+      div.appendChild(sp);
+    });
+    codeNotes.appendChild(div);
+  });
+}
+renderCode();
+
+function typeCodeLines(uptoIdx) {
+  // Mark all lines up to `uptoIdx` as typed.
+  for (let i = 0; i <= uptoIdx && i < codeLines.length; i++) {
+    const el = codeNotes.querySelector(`.line[data-idx="${i}"]`);
+    if (el && !el.classList.contains('is-typed')) {
+      el.classList.add('is-typed');
+    }
+  }
+}
+
+function highlightRunningLine(idx) {
+  // Mark print() line + the comment for the running iteration.
+  codeNotes.querySelectorAll('.line.is-running').forEach(el => el.classList.remove('is-running'));
+  const target = codeNotes.querySelector(`.line[data-idx="${idx}"]`);
+  if (target) target.classList.add('is-running');
+}
+
+function setAct(act) {
+  actSteps.forEach((s) => {
+    const v = +s.dataset.act;
+    s.classList.toggle('is-active', v === act);
+    s.classList.toggle('is-done',   v < act);
+  });
+  progressDots.forEach((d) => {
+    const v = +d.dataset.act;
+    d.classList.toggle('is-active', v === act);
+    d.classList.toggle('is-done',   v < act);
+  });
+}
+
+// Pointer (animated arrow before tasks)
+const pointer = $('pointer');
+function showPointer(target, label = '↓ tap aici') {
+  pointer.textContent = label;
+  const r = target.getBoundingClientRect();
+  pointer.style.left = (r.left + r.width / 2 - 50) + 'px';
+  pointer.style.top  = (r.top - 38) + 'px';
+  gsap.fromTo(pointer,
+    { opacity: 0, y: 10 },
+    { opacity: 1, y: 0, duration: 0.45, ease: 'expo.out' }
+  );
+  gsap.to(pointer, { y: '-=8', duration: 0.6, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+}
+function hidePointer() {
+  gsap.killTweensOf(pointer);
+  gsap.to(pointer, { opacity: 0, duration: 0.25 });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 10. Notes panel toggle + entrance.
+// ─────────────────────────────────────────────────────────────────────
+const notesPanel = $('notes');
+const notesToggle = $('notesToggle');
+let notesCollapsed = false;
+function showNotesPanel() {
+  gsap.to(notesPanel, {
+    x: 0,
+    opacity: 1,
+    duration: 0.85,
+    ease: 'elastic.out(1, 0.6)'
+  });
+}
+notesToggle.addEventListener('click', () => {
+  notesCollapsed = !notesCollapsed;
+  gsap.to(notesPanel, {
+    x: notesCollapsed ? 280 : 0,
+    duration: 0.45,
+    ease: 'power3.inOut'
+  });
+  notesToggle.textContent = notesCollapsed ? '◂' : '▾';
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// 11. Card task (Act 2 interaction).
+// ─────────────────────────────────────────────────────────────────────
+const taskArea   = $('taskArea');
+const taskPrompt = $('taskPrompt');
+const cardsGrid  = $('cardsGrid');
+
+function runCards(opts) {
+  // Render and resolve when user picks all correct.
+  return new Promise((resolve) => {
+    taskPrompt.innerHTML = opts.prompt;
+    cardsGrid.innerHTML = '';
+    const correctSet = new Set(opts.correct);
+    let captured = 0;
+    let mistakes = 0;
+
+    const needed = correctSet.size;
+
+    const cardEls = opts.cards.map((n) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'c3d-card';
+      b.textContent = n;
+      cardsGrid.appendChild(b);
+      b.addEventListener('click', () => {
+        if (b.classList.contains('is-correct') || b.classList.contains('is-flying')) return;
+        if (correctSet.has(n)) {
+          b.classList.add('is-correct');
+          captured++;
+          if (captured >= needed) {
+            setTimeout(() => resolve({ perfect: mistakes === 0, mistakes }), 540);
+          }
+        } else {
+          b.classList.add('is-wrong');
+          mistakes++;
+          setTimeout(() => b.classList.remove('is-wrong'), 380);
+        }
+      });
+      return b;
+    });
+
+    gsap.fromTo(taskPrompt,
+      { opacity: 0, y: 16 },
+      { opacity: 1, y: 0, duration: 0.55, ease: 'expo.out' }
+    );
+    gsap.fromTo(cardEls,
+      { opacity: 0, y: 26, scale: 0.85 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'back.out(1.7)', stagger: 0.05, delay: 0.15 }
+    );
+
+    // Wayfinding pointer to the first card after a beat.
+    setTimeout(() => showPointer(cardEls[1] || cardEls[0]), 700);
+    cardsGrid.addEventListener('click', hidePointer, { once: true });
+  });
+}
+
+function hideCards() {
+  const cards = Array.from(cardsGrid.children);
+  return new Promise((resolve) => {
+    gsap.to([taskPrompt, ...cards], {
+      opacity: 0,
+      y: -20,
+      duration: 0.35,
+      ease: 'power2.in',
+      stagger: 0.03,
+      onComplete: () => {
+        cardsGrid.innerHTML = '';
+        taskPrompt.innerHTML = '';
+        resolve();
+      }
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 12. Aha overlay.
+// ─────────────────────────────────────────────────────────────────────
+const ahaOverlay = $('ahaOverlay');
+function showAha() {
+  gsap.fromTo(ahaOverlay,
+    { opacity: 0 },
+    { opacity: 1, duration: 0.45, ease: 'power2.out' }
+  );
+  gsap.fromTo(ahaOverlay.querySelector('.xp'),
+    { scale: 0.4, y: 30 },
+    { scale: 1, y: 0, duration: 0.85, ease: 'elastic.out(1, 0.55)' }
+  );
+}
+function hideAha() {
+  gsap.to(ahaOverlay, { opacity: 0, duration: 0.45 });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 13. Main flow — Python "Loops" lesson, 3 acts.
+// ─────────────────────────────────────────────────────────────────────
+let abortFlag = false;
+let tickWatcher = null;
+
+async function runLoopsFlow() {
+  abortFlag = false;
+  resetAll();
+
+  // ── Act 1 — Узнаём ──────────────────────────────────────────────
+  setAct(1);
+  setOrbState('thinking');
+  showNotesPanel();
+  await sleep(700);
+
+  setOrbState('speaking');
+  addPhrase({ html: '<em>Loops</em>?',        anchor: 'tl', size: 'xl', tilt: -3 });
+  await setShape('infinity', { duration: 0.85 });
+  await sleep(700);
+  if (abortFlag) return;
+
+  addPhrase({ html: 'Tema mea<br><em>preferată</em>.', anchor: 'c', size: 'l', tilt: 0 });
+  await setShape('heart', { duration: 0.9 });
+  addMemo('Cikluri = ритм повторения');
+  await sleep(900);
+  if (abortFlag) return;
+
+  addPhrase({ html: 'Uite.', anchor: 'br', size: 'l', tilt: 5 });
+  await setShape('arrow', { duration: 0.7 });
+  await sleep(700);
+  if (abortFlag) return;
+
+  // Transition to Act 2: collapse phrases, reveal window scene.
+  await clearPhrases();
+  setAct(2);
+
+  // ── Act 2 — Твой ход (code + iterator running) ──────────────────
+  setOrbState('speaking');
+  windowScene.visible = true;
+  gsap.fromTo(windowScene.scale, { x: 0, y: 0, z: 0 }, {
+    x: 0.6, y: 0.6, z: 0.6, duration: 0.75, ease: 'back.out(1.6)'
+  });
+  await setShape('range', { duration: 0.95 });
+
+  // Type code into notes panel line by line.
+  for (let i = 0; i < codeLines.length; i++) {
+    typeCodeLines(i);
+    await sleep(220);
+    if (abortFlag) return;
+  }
+
+  addGlossary('range(a,b)', '— числа от a до b−1');
+  addPhrase({ html: 'Asta e <em>range</em>.', anchor: 't',  size: 'm', tilt: 0 });
+  await sleep(900);
+  addPhrase({ html: 'De la <em>1</em>...',    anchor: 'tl', size: 'm', tilt: -2 });
+  await sleep(700);
+  addPhrase({ html: '... până la <em>6</em>.', anchor: 'br', size: 'm', tilt: 3 });
+  await sleep(800);
+  addPhrase({ html: 'Dar <em>6 NU intră</em>.', anchor: 'c', size: 'l', tilt: 0 });
+  addMemo('range(1,6) → последнее <b>не включается</b>');
+  await sleep(1000);
+  if (abortFlag) return;
+
+  // Start iterator orbit "tick" → highlight comment lines 3..7 in sync.
+  if (tickWatcher) clearInterval(tickWatcher);
+  tickWatcher = onIteratorTick((slot) => {
+    // slot 0..4 → comment lines 3..7
+    highlightRunningLine(3 + slot);
+  });
+
+  // Cards interaction.
+  await clearPhrases();
+  await sleep(200);
+  setOrbState('listening');
+  await setShape('sphere', { duration: 0.7 });
+  addPhrase({ html: 'Acum tu.', anchor: 'tl', size: 'l', tilt: -2 });
+  await sleep(450);
+
+  const result = await runCards({
+    prompt: 'Atinge numerele din <code>range(1, 6)</code>',
+    cards:  [0, 1, 2, 3, 4, 5, 6, 7],
+    correct: [1, 2, 3, 4, 5]
+  });
+  hidePointer();
+  if (abortFlag) return;
+
+  await clearPhrases();
+  await hideCards();
+
+  // ── Act 3 — AHA ──────────────────────────────────────────────────
+  setAct(3);
+  setOrbState('celebrating');
+
+  if (result.perfect) {
+    addPhrase({ html: '<em>Perfect.</em>',         anchor: 'tl', size: 'xl', tilt: -4 });
+    addPhrase({ html: '6 rămâne <em>afară</em>.',  anchor: 'br', size: 'l',  tilt: 4 });
+  } else {
+    addPhrase({ html: 'Aproape.',                  anchor: 'tl', size: 'xl', tilt: -4 });
+    addPhrase({ html: '6 rămâne <em>afară</em>.',  anchor: 'br', size: 'l',  tilt: 4 });
+  }
+  addMemo('aha: range(1,6) = [1, 2, 3, 4, 5]');
+
+  await setShape('lightbulb', { duration: 0.85 });
+  await sleep(450);
+  await setShape('explode', { duration: 0.7, ease: 'expo.out' });
+  showAha();
+  await sleep(1800);
+  await setShape('sphere', { duration: 1.1, ease: 'expo.out' });
+  setOrbState('thinking');
+  await sleep(1400);
+  hideAha();
+  if (tickWatcher) { clearInterval(tickWatcher); tickWatcher = null; }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 14. Dev jump bar.
+// ─────────────────────────────────────────────────────────────────────
+function resetAll() {
+  // Stop any tick watcher.
+  if (tickWatcher) { clearInterval(tickWatcher); tickWatcher = null; }
+  // Clear phrases.
+  livePhrases.length = 0;
+  phrasesHost.innerHTML = '';
+  // Hide aha.
+  ahaOverlay.style.opacity = '0';
+  // Clear task.
+  cardsGrid.innerHTML = '';
+  taskPrompt.innerHTML = '';
+  // Reset notes.
+  memoList.innerHTML = '';
+  glosList.innerHTML = '';
+  renderCode();
+  // Window scene hidden.
+  windowScene.visible = false;
+  windowScene.scale.setScalar(0);
+  iteratorAngle = 0;
+  lastTick = -1;
+  setOrbState('thinking');
+  setShape('sphere', { duration: 0.4 });
+  setAct(1);
+  hidePointer();
+}
+
+document.querySelectorAll('.c3d-dev [data-jump]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    abortFlag = true;       // signal current loop to stop
+    await sleep(80);
+    abortFlag = false;
+    const j = +btn.dataset.jump;
+    resetAll();
+    showNotesPanel();
+    if (j === 1) {
+      runLoopsFlow();
+    } else if (j === 2) {
+      // Jump to act 2 — code + range
+      setAct(2);
+      windowScene.visible = true;
+      windowScene.scale.setScalar(0.6);
+      await setShape('range', { duration: 0.6 });
+      for (let i = 0; i < codeLines.length; i++) typeCodeLines(i);
+      if (tickWatcher) clearInterval(tickWatcher);
+      tickWatcher = onIteratorTick((slot) => highlightRunningLine(3 + slot));
+      addPhrase({ html: 'Asta e <em>range</em>.', anchor: 't', size: 'm' });
+      addMemo('range(1,6) → последнее <b>не включается</b>');
+    } else if (j === 3) {
+      // Jump to act 2 cards
+      setAct(2);
+      await setShape('sphere', { duration: 0.4 });
+      setOrbState('listening');
+      const result = await runCards({
+        prompt: 'Atinge numerele din <code>range(1, 6)</code>',
+        cards:  [0, 1, 2, 3, 4, 5, 6, 7],
+        correct: [1, 2, 3, 4, 5]
+      });
+      hidePointer();
+    } else if (j === 4) {
+      // Jump to aha
+      setAct(3);
+      setOrbState('celebrating');
+      addPhrase({ html: '<em>Perfect.</em>',        anchor: 'tl', size: 'xl', tilt: -4 });
+      addPhrase({ html: '6 rămâne <em>afară</em>.', anchor: 'br', size: 'l',  tilt: 4 });
+      await setShape('lightbulb', { duration: 0.6 });
+      await sleep(350);
+      await setShape('explode', { duration: 0.6 });
+      showAha();
+      await sleep(900);
+      await setShape('sphere', { duration: 1.0 });
+      setOrbState('thinking');
+    }
+  });
+});
+
+$('replay').addEventListener('click', async () => {
+  abortFlag = true;
+  await sleep(80);
+  hideAha();
+  abortFlag = false;
+  resetAll();
+  showNotesPanel();
+  runLoopsFlow();
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// 15. Auto-start.
+// ─────────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  setTimeout(() => runLoopsFlow(), 350);
+});
+</script>
+</body>
+</html>
