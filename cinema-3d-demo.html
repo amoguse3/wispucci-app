@@ -56,18 +56,9 @@ body.layout-stage .c3d-orb-host {
   }
 }
 
-/* In Act 5 (quiz mode) the orb stays centered but shrinks so karaoke
-   phrases (top) and the question task area (bottom) have room. */
-body.layout-quiz .c3d-orb-host {
-  width: 200px;
-  height: 200px;
-  transform: translate(-50%, -50%);
-}
-@media (max-width: 768px) {
-  body.layout-quiz .c3d-orb-host {
-    width: 140px; height: 140px;
-  }
-}
+/* Act 5 (Practica) reuses the same stage layout as Act 2 — code-stage
+   on the left, orb on the right, answer cards below in .c3d-task.
+   No quiz-specific layout class needed. */
 
 /* ─── Orb emotions — SVG attributes are set in JS (setOrbEmotion) ─── */
 .orb .mouth        { transition: d .35s ease, stroke-width .25s ease; }
@@ -1094,7 +1085,6 @@ function setOrbEmotion(emotion) {
 function setLayoutMode(mode) {
   document.body.classList.toggle('layout-stage',  mode === 'stage');
   document.body.classList.toggle('layout-spread', mode === 'spread');
-  document.body.classList.toggle('layout-quiz',   mode === 'quiz');
 }
 setLayoutMode('spread');
 
@@ -1822,20 +1812,64 @@ function fullStarsCount() {
   return n;
 }
 
+// Minimal Python syntax highlighter for the Practica question code blocks.
+// Wraps `for`, `in`, `range`, `print`, and numeric literals in the same
+// tok-* spans used by the Act 2 / Act 4 stage code.
+function pyHighlight(src) {
+  const esc = src
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return esc
+    .replace(/\b(for|in)\b/g, '<span class="tok-kw">$1</span>')
+    .replace(/\b(range|print)\b/g, '<span class="tok-fn">$1</span>')
+    .replace(/\b(\d+)\b/g, '<span class="tok-num">$1</span>')
+    .replace(/\n/g, '<br>')
+    .replace(/    /g, '&nbsp;&nbsp;&nbsp;&nbsp;');
+}
+
+// Animate the correct answer into stageOutput, one row at a time (like Act 2).
+async function spellAnswerInOutput(answerStr) {
+  clearStageOutput();
+  const isEmpty = /^nimic/i.test(answerStr.trim());
+  if (isEmpty) {
+    const row = document.createElement('div');
+    row.className = 'out-row is-empty';
+    row.textContent = '(nimic — buclă goală)';
+    stageOutput.appendChild(row);
+    void row.offsetWidth;
+    row.classList.add('is-shown');
+    await sleep(700);
+    return;
+  }
+  const items = answerStr.split(/,\s*/).filter(Boolean);
+  for (const v of items) {
+    const row = document.createElement('div');
+    row.className = 'out-row';
+    row.textContent = '> ' + v;
+    stageOutput.appendChild(row);
+    void row.offsetWidth;
+    row.classList.add('is-shown');
+    gsap.fromTo(theOrb, { scale: 1 }, { scale: 1.04, duration: 0.1, yoyo: true, repeat: 1, ease: 'sine.inOut' });
+    await sleep(240);
+  }
+}
+
 async function askPracticaQuestion(idx) {
   const q = PRACTICA[idx];
   cardsGrid.innerHTML = '';
   answersGrid.innerHTML = '';
+  taskPrompt.innerHTML = '';
 
-  taskPrompt.innerHTML = `<div style="margin-bottom:8px">${q.prompt}</div>` +
-    `<pre style="font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--text);background:rgba(20,0,22,0.45);padding:10px 14px;border-left:3px solid var(--accent);border-radius:8px;margin:8px auto;display:inline-block;text-align:left;white-space:pre">${q.code}</pre>`;
-  gsap.fromTo(taskPrompt, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' });
-
-  // Karaoke phrase: question number wayfinding
-  addPhrase({
-    html: `Întrebarea <em>${idx + 1}</em> / ${PRACTICA.length}`,
-    anchor: 't', size: 'm'
-  });
+  // Stage caption: question + number tag
+  setStageCaption(
+    `<span style="display:block;font-family:'JetBrains Mono',monospace;font-size:0.45em;letter-spacing:0.25em;color:var(--accent-soft);opacity:0.65;margin-bottom:6px;text-transform:uppercase">Întrebarea ${idx + 1} / ${PRACTICA.length}</span>${q.prompt}`
+  );
+  // Stage code: the question's Python snippet, syntax-highlighted
+  setStageCodeHTML(pyHighlight(q.code));
+  clearStageOutput();
+  stageHint.textContent = '↓ alege răspunsul';
+  gsap.fromTo(stageHint, { opacity: 0 }, { opacity: 0.7, duration: 0.4, delay: 0.25 });
 
   let attempts = 0;
   return new Promise((resolve) => {
@@ -1853,23 +1887,26 @@ async function askPracticaQuestion(idx) {
           rightTick();
           setOrbEmotion('wow');
           setOrbState('celebrating');
+          stageHint.textContent = '↑ exact!';
+          await spellAnswerInOutput(a);
           updateScoreBar(idx, attempts === 1 ? 'full' : 'half');
-          await sleep(900);
+          await sleep(700);
           resolve({ correct: true, attempts });
         } else {
           b.classList.add('is-wrong', 'is-disabled');
           wrongTick();
           setOrbEmotion('confused');
           if (attempts === 1) {
-            // First wrong → show hint.
             setStageCaption(`<em>Atenție:</em> ${q.hint}`);
+            stageHint.textContent = '↓ mai încearcă';
           } else {
-            // Second wrong → reveal correct answer + spell it out.
+            // Second wrong → reveal correct + spell it + half-star credit.
             answerEls[q.correct].classList.add('is-correct');
             setStageCaption(`Răspuns: <em>${q.answers[q.correct]}</em>. ${q.hint}`);
-            // Half-star credit on second-try reveal (so user still feels progress).
+            stageHint.textContent = '↑ ține minte';
             updateScoreBar(idx, 'half');
-            await sleep(1400);
+            await spellAnswerInOutput(q.answers[q.correct]);
+            await sleep(1100);
             resolve({ correct: false, attempts, revealed: true });
           }
         }
@@ -1879,49 +1916,35 @@ async function askPracticaQuestion(idx) {
 
     gsap.fromTo(answerEls,
       { opacity: 0, y: 14 },
-      { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out', stagger: 0.07, delay: 0.15 }
+      { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out', stagger: 0.07, delay: 0.2 }
     );
   });
 }
 
 async function runPractica() {
-  setLayoutMode('quiz');
-  setSpreadVariant('karaoke');
+  setLayoutMode('stage');
   setAct(5);
   setOrbState('listening');
   setOrbEmotion('neutral');
   await clearPhrases();
   renderScoreBar();
-
-  // Karaoke header phrase
-  addPhrase({ html: '<em>Practică.</em>', anchor: 't', size: 'l' });
-  await sleep(500);
+  await sleep(300);
 
   for (let i = 0; i < PRACTICA.length; i++) {
     await askPracticaQuestion(i);
-    await sleep(300);
-    // Clear question prompt + answer cards before next question. Must AWAIT
-    // the clear or the next question's freshly-appended cards get wiped by
-    // the previous question's onComplete callback.
+    await sleep(420);
+    // Fade answer buttons out before rendering next question. AWAIT the
+    // clear or the next question's fresh buttons get wiped by stale
+    // onComplete callbacks.
     await new Promise((resolve) => {
       const kids = Array.from(answersGrid.children);
-      gsap.to(taskPrompt, { opacity: 0, duration: 0.2 });
-      if (!kids.length) {
-        answersGrid.innerHTML = '';
-        taskPrompt.innerHTML = '';
-        setTimeout(resolve, 220);
-        return;
-      }
+      if (!kids.length) { answersGrid.innerHTML = ''; setTimeout(resolve, 200); return; }
       gsap.to(kids, {
         opacity: 0, y: -10, duration: 0.25, stagger: 0.04,
-        onComplete: () => {
-          answersGrid.innerHTML = '';
-          taskPrompt.innerHTML = '';
-          resolve();
-        }
+        onComplete: () => { answersGrid.innerHTML = ''; resolve(); }
       });
     });
-    await sleep(180);
+    await sleep(120);
   }
 
   await sleep(300);
