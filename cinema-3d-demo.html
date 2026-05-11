@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Wispucci — Cinema 3D (Particle Orb + Window Scene)</title>
+<title>Wispucci — Cinema (magazine spread)</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,8 +12,8 @@
 
 <style>
 /* ===========================================================================
-   CINEMA 3D DEMO — Particle Orb + Window Scenes (prototype)
-   Reuses Wispucci design tokens from style.css. Self-contained layout.
+   CINEMA DEMO — Magazine spread + GSAP + notes panel (no 3D)
+   Reuses Wispucci design tokens + .orb SVG from style.css.
 =========================================================================== */
 
 html, body { height: 100%; }
@@ -25,15 +25,21 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
 }
 
-/* Three.js canvas covers the screen behind DOM overlay. */
-#scene-3d {
+/* ─── Orb host — sits behind overlay, centred in viewport ────────── */
+.c3d-orb-host {
   position: fixed;
-  inset: 0;
-  z-index: 1;
-  display: block;
-  width: 100vw;
-  height: 100vh;
+  left: 50%;
+  top: 50%;
+  width: 320px;
+  height: 320px;
+  /* offset to the LEFT so the orb visually balances the notes panel (right) */
+  transform: translate(-50%, -50%) translateX(-150px);
+  z-index: 2;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
 }
+.c3d-orb-host .orb { width: 100%; height: 100%; }
 
 /* ─── Overlay: magazine spread + notes + wayfinding ───────── */
 .c3d-overlay {
@@ -430,8 +436,33 @@ body {
 </head>
 <body>
 
-<!-- 3D scene canvas (Three.js mounts here) -->
-<canvas id="scene-3d"></canvas>
+<!-- Orb (SVG/CSS, design-system .orb) -->
+<div class="c3d-orb-host" id="orbHost">
+  <div class="orb" id="theOrb">
+    <div class="orb-glow"></div>
+    <div class="orb-halo halo-1"></div>
+    <div class="orb-halo halo-2"></div>
+    <div class="orb-halo halo-3"></div>
+    <div class="orb-core">
+      <div class="orb-shine"></div>
+      <svg class="orb-face" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <g class="face-eyes">
+          <ellipse class="eye eye-l" cx="38" cy="50" rx="3.6" ry="5.4"/>
+          <ellipse class="eye eye-r" cx="62" cy="50" rx="3.6" ry="5.4"/>
+          <circle class="eye-shine eye-shine-l" cx="39.5" cy="48" r="1.2"/>
+          <circle class="eye-shine eye-shine-r" cx="63.5" cy="48" r="1.2"/>
+        </g>
+        <path class="mouth" d="M 40 65 Q 50 67 60 65" fill="none" stroke-linecap="round"/>
+        <g class="cheeks">
+          <circle class="cheek cheek-l" cx="30" cy="60" r="3"/>
+          <circle class="cheek cheek-r" cx="70" cy="60" r="3"/>
+        </g>
+      </svg>
+    </div>
+    <div class="orb-orbit"><span class="orbit-dot"></span><span class="orbit-dot"></span><span class="orbit-dot"></span></div>
+    <div class="orb-shimmer"></div>
+  </div>
+</div>
 
 <!-- DOM overlay: magazine spread + wayfinding + notes -->
 <div class="c3d-overlay">
@@ -506,26 +537,15 @@ body {
 <!-- GSAP (same version as index.html) -->
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 
-<!-- Three.js as module -->
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
-  }
-}
-</script>
-
-<script type="module">
-import * as THREE from 'three';
-
+<script>
 /* ===========================================================================
-   CINEMA 3D DEMO — Particle Orb + Window Scene
+   CINEMA DEMO — Magazine spread + GSAP (no 3D)
    ─────────────────────────────────────────────────────────────────────────
    Stack:
-     • Three.js (CDN, module) — particle cloud + small window scene
-     • GSAP                   — phrase entries, particle morph timing, ui
-     • Vanilla DOM            — magazine-spread overlay (no React)
-   Theme reused: Loops / for i in range(1, 6): print(i)
+     • GSAP        — phrase entries, ui state
+     • Vanilla DOM — magazine-spread overlay (no React, no Three.js)
+     • Wispucci .orb (SVG/CSS, design system) as the centred character
+   Theme: Python Loops / for i in range(1, 6): print(i)
 =========================================================================== */
 
 const $ = (id) => document.getElementById(id);
@@ -533,418 +553,40 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const lerp  = (a, b, t) => a + (b - a) * t;
 
 // ─────────────────────────────────────────────────────────────────────
-// 1.  Three.js scene setup
+// 1.  Orb host references + state CSS toggle
 // ─────────────────────────────────────────────────────────────────────
-const canvas = $('scene-3d');
-const renderer = new THREE.WebGLRenderer({
-  canvas,
-  antialias: true,
-  alpha: true,
-  powerPreference: 'high-performance'
-});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x210124, 1);
+const orbHost = $('orbHost');
+const theOrb  = $('theOrb');
 
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x210124, 0.05);
-
-const camera = new THREE.PerspectiveCamera(
-  42,
-  window.innerWidth / window.innerHeight,
-  0.1, 50
-);
-camera.position.set(0, 0, 5.2);
-
-// Lights for inner window-scene mesh.
-scene.add(new THREE.AmbientLight(0xF4FDAF, 0.55));
-const key = new THREE.DirectionalLight(0xFFFFD9, 0.75);
-key.position.set(2, 3, 4);
-scene.add(key);
-const rim = new THREE.DirectionalLight(0xC9B86A, 0.45);
-rim.position.set(-3, -1, 2);
-scene.add(rim);
-
-// Orb anchor — particles + window-scene live under this group.
-const orbGroup = new THREE.Group();
-scene.add(orbGroup);
-
-// ─────────────────────────────────────────────────────────────────────
-// 2.  Shape target generators (each returns Float32Array of N * 3)
-// ─────────────────────────────────────────────────────────────────────
-const N = 2400;            // particle count
-const ORB_RADIUS = 1.05;
-const jitter = () => (Math.random() - 0.5) * 0.06;
-
-function shapeSphere() {
-  // Fibonacci sphere — even distribution on a unit sphere surface.
-  const a = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    const y = 1 - (i / (N - 1)) * 2;          // y from 1 → -1
-    const r = Math.sqrt(1 - y * y);
-    const t = i * Math.PI * (3 - Math.sqrt(5));
-    a[i * 3]     = Math.cos(t) * r * ORB_RADIUS + jitter();
-    a[i * 3 + 1] = y * ORB_RADIUS + jitter();
-    a[i * 3 + 2] = Math.sin(t) * r * ORB_RADIUS + jitter();
-  }
-  return a;
-}
-
-function shapeInfinity() {
-  // Lemniscate of Bernoulli, extruded slightly in Z for depth.
-  const a = new Float32Array(N * 3);
-  const scale = 1.55;
-  for (let i = 0; i < N; i++) {
-    const t = (i / N) * Math.PI * 2;
-    const d = 1 + Math.sin(t) * Math.sin(t);
-    const x = (Math.cos(t) / d) * scale;
-    const y = (Math.sin(t) * Math.cos(t) / d) * scale;
-    a[i * 3]     = x + jitter();
-    a[i * 3 + 1] = y + jitter();
-    a[i * 3 + 2] = (Math.random() - 0.5) * 0.18;
-  }
-  return a;
-}
-
-function shapeHeart() {
-  // Classic heart curve, normalised + slight Z scatter.
-  const a = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    const t = (i / N) * Math.PI * 2;
-    const x = 16 * Math.pow(Math.sin(t), 3);
-    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
-    a[i * 3]     = x * 0.075 + jitter();
-    a[i * 3 + 1] = y * 0.075 + jitter() + 0.05;
-    a[i * 3 + 2] = (Math.random() - 0.5) * 0.18;
-  }
-  return a;
-}
-
-function shapeArrow() {
-  // Diagonal ↗ arrow: shaft + head, particles distributed along segments.
-  const a = new Float32Array(N * 3);
-  const tip   = [0.9,  0.9, 0];
-  const tail  = [-0.9, -0.9, 0];
-  const headA = [0.3,  0.9, 0];
-  const headB = [0.9,  0.3, 0];
-  const shaftN = Math.floor(N * 0.65);
-  const fillSegment = (i, A, B) => {
-    const t = Math.random();
-    a[i * 3]     = lerp(A[0], B[0], t) + jitter();
-    a[i * 3 + 1] = lerp(A[1], B[1], t) + jitter();
-    a[i * 3 + 2] = (Math.random() - 0.5) * 0.12;
-  };
-  for (let i = 0; i < shaftN; i++) fillSegment(i, tail, tip);
-  const headEach = Math.floor((N - shaftN) / 2);
-  for (let i = 0; i < headEach; i++) fillSegment(shaftN + i, tip, headA);
-  for (let i = shaftN + headEach; i < N; i++) fillSegment(i, tip, headB);
-  return a;
-}
-
-function shapeRange() {
-  // 5 small clusters in a row — the literal {1,2,3,4,5}.
-  const a = new Float32Array(N * 3);
-  const groups = 5;
-  const groupRadius = 0.22;
-  const spacing = 0.46;
-  const xOffset = -spacing * (groups - 1) / 2;
-  const perGroup = Math.floor(N / groups);
-  for (let g = 0; g < groups; g++) {
-    const cx = xOffset + g * spacing;
-    const start = g * perGroup;
-    const end = (g === groups - 1) ? N : start + perGroup;
-    for (let i = start; i < end; i++) {
-      // disk in xy
-      const r = Math.sqrt(Math.random()) * groupRadius;
-      const a2 = Math.random() * Math.PI * 2;
-      a[i * 3]     = cx + Math.cos(a2) * r + jitter();
-      a[i * 3 + 1] = Math.sin(a2) * r + jitter();
-      a[i * 3 + 2] = (Math.random() - 0.5) * 0.15;
-    }
-  }
-  return a;
-}
-
-function shapeLightbulb() {
-  // Bulb body (circle) + neck (rect) + filament dots in centre.
-  const a = new Float32Array(N * 3);
-  const bulbN = Math.floor(N * 0.78);
-  for (let i = 0; i < bulbN; i++) {
-    // Disk on bulb plus slight 3D
-    const r = Math.sqrt(Math.random()) * 0.75;
-    const t = Math.random() * Math.PI * 2;
-    a[i * 3]     = Math.cos(t) * r + jitter();
-    a[i * 3 + 1] = Math.sin(t) * r + 0.15 + jitter();
-    a[i * 3 + 2] = (Math.random() - 0.5) * 0.35;
-  }
-  // Base/neck — rectangle below bulb
-  for (let i = bulbN; i < N; i++) {
-    a[i * 3]     = (Math.random() - 0.5) * 0.45;
-    a[i * 3 + 1] = -0.85 + (Math.random() - 0.5) * 0.35;
-    a[i * 3 + 2] = (Math.random() - 0.5) * 0.18;
-  }
-  return a;
-}
-
-function shapeExplode() {
-  // Burst — distant random shell, used for aha celebration.
-  const a = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    // Random direction × random distance (0.8 - 3.5)
-    const u = Math.random() * 2 - 1;
-    const t = Math.random() * Math.PI * 2;
-    const r = Math.sqrt(1 - u * u);
-    const d = 0.9 + Math.random() * 2.6;
-    a[i * 3]     = Math.cos(t) * r * d;
-    a[i * 3 + 1] = u * d;
-    a[i * 3 + 2] = Math.sin(t) * r * d;
-  }
-  return a;
-}
-
-const SHAPES = {
-  sphere:     shapeSphere(),
-  infinity:   shapeInfinity(),
-  heart:      shapeHeart(),
-  arrow:      shapeArrow(),
-  range:      shapeRange(),
-  lightbulb:  shapeLightbulb(),
-  explode:    shapeExplode()
-};
-
-// ─────────────────────────────────────────────────────────────────────
-// 3.  Particle geometry — start at sphere, animate target shape.
-// ─────────────────────────────────────────────────────────────────────
-const startPositions = new Float32Array(SHAPES.sphere);   // current frame
-const fromPositions  = new Float32Array(SHAPES.sphere);   // shape we are leaving
-const toPositions    = new Float32Array(SHAPES.sphere);   // shape we are heading to
-
-const geometry = new THREE.BufferGeometry();
-geometry.setAttribute('position', new THREE.BufferAttribute(startPositions, 3));
-
-// Slight per-particle scale variation through a colour-like aAlpha attribute.
-const sizes = new Float32Array(N);
-for (let i = 0; i < N; i++) sizes[i] = 0.6 + Math.random() * 0.8;
-geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
-
-// Simple soft-disc PointsMaterial. Additive blending gives the glow.
-function makeDiscTexture(size = 128) {
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const ctx = c.getContext('2d');
-  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  g.addColorStop(0,    'rgba(255,255,217,1)');
-  g.addColorStop(0.25, 'rgba(239,221,141,0.9)');
-  g.addColorStop(0.55, 'rgba(201,184,106,0.35)');
-  g.addColorStop(1,    'rgba(0,0,0,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, size, size);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-const pointTex = makeDiscTexture();
-
-const material = new THREE.PointsMaterial({
-  size: 0.07,
-  map: pointTex,
-  transparent: true,
-  alphaTest: 0.02,
-  depthWrite: false,
-  blending: THREE.AdditiveBlending,
-  color: 0xEFDD8D,
-  sizeAttenuation: true
-});
-
-const particles = new THREE.Points(geometry, material);
-orbGroup.add(particles);
-
-// ─────────────────────────────────────────────────────────────────────
-// 4.  Window scene — small 3D vignette nested inside the orb (Loops theme)
-//     • torus = the loop body
-//     • iterator sphere orbits it → highlights next code line per pass
-// ─────────────────────────────────────────────────────────────────────
-const windowScene = new THREE.Group();
-windowScene.visible = false;
-windowScene.scale.setScalar(0.6);
-orbGroup.add(windowScene);
-
-const torus = new THREE.Mesh(
-  new THREE.TorusGeometry(0.45, 0.085, 24, 80),
-  new THREE.MeshStandardMaterial({
-    color: 0xC9B86A,
-    emissive: 0x65743A,
-    emissiveIntensity: 0.4,
-    roughness: 0.45,
-    metalness: 0.4
-  })
-);
-torus.rotation.x = Math.PI * 0.32;
-windowScene.add(torus);
-
-const iterator = new THREE.Mesh(
-  new THREE.IcosahedronGeometry(0.085, 1),
-  new THREE.MeshStandardMaterial({
-    color: 0xFFFFD9,
-    emissive: 0xEFDD8D,
-    emissiveIntensity: 1.6,
-    roughness: 0.18,
-    metalness: 0.2
-  })
-);
-windowScene.add(iterator);
-
-// Halo behind the orb that subtly pulses with the speaking state.
-const halo = new THREE.Mesh(
-  new THREE.RingGeometry(1.35, 1.55, 64),
-  new THREE.MeshBasicMaterial({
-    color: 0xEFDD8D,
-    transparent: true,
-    opacity: 0.0,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide
-  })
-);
-halo.position.z = -0.5;
-orbGroup.add(halo);
-
-// ─────────────────────────────────────────────────────────────────────
-// 5.  Morph engine — interpolates particle positions to target shape.
-// ─────────────────────────────────────────────────────────────────────
-const morph = { progress: 1 };                  // 0 = at from, 1 = at to
-let activeShape = 'sphere';
-
-function setShape(name, opts = {}) {
-  if (!SHAPES[name]) return Promise.resolve();
-  // Capture current positions as new "from".
-  for (let i = 0; i < N * 3; i++) fromPositions[i] = startPositions[i];
-  // Set "to".
-  const target = SHAPES[name];
-  for (let i = 0; i < N * 3; i++) toPositions[i] = target[i];
-  // Animate progress 0 → 1.
-  morph.progress = 0;
-  activeShape = name;
-  return new Promise((resolve) => {
-    gsap.to(morph, {
-      progress: 1,
-      duration: opts.duration ?? 0.95,
-      ease: opts.ease ?? 'power3.inOut',
-      onComplete: resolve
-    });
-  });
-}
-
-// Apply morph each frame.
-const posAttr = geometry.getAttribute('position');
-function applyMorph() {
-  const p = morph.progress;
-  for (let i = 0; i < N * 3; i++) {
-    startPositions[i] = lerp(fromPositions[i], toPositions[i], p);
-  }
-  posAttr.needsUpdate = true;
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// 6.  Animation loop.
-// ─────────────────────────────────────────────────────────────────────
-let clock = new THREE.Clock();
-let iteratorAngle = 0;
-let orbState = 'thinking';     // thinking | speaking | listening | celebrating
-
-// "speaking" pulse — affects orb breath and halo opacity.
-const orbBreath = { v: 0 };
+// orb states are CSS classes — the SVG orb (style.css) already animates
+//   thinking | speaking | listening | celebrating
 function setOrbState(state) {
-  orbState = state;
-  // Halo opacity per state.
-  const haloOpacity = {
-    thinking: 0.04,
-    speaking: 0.18,
-    listening: 0.08,
-    celebrating: 0.32
-  }[state] ?? 0.05;
-  gsap.to(halo.material, { opacity: haloOpacity, duration: 0.6, ease: 'sine.out' });
-  // Particle size per state.
-  const pointSize = {
-    thinking: 0.07,
-    speaking: 0.085,
-    listening: 0.06,
-    celebrating: 0.11
-  }[state] ?? 0.07;
-  gsap.to(material, { size: pointSize, duration: 0.5, ease: 'sine.out' });
+  ['is-thinking', 'is-speaking', 'is-listening', 'is-celebrating'].forEach((c) => theOrb.classList.remove(c));
+  theOrb.classList.add('is-' + state);
 }
-
-function frame() {
-  const dt = Math.min(clock.getDelta(), 0.06);
-  applyMorph();
-
-  // Orb gentle rotation — slower when listening, faster when celebrating.
-  const rotSpeed = {
-    thinking: 0.12,
-    speaking: 0.18,
-    listening: 0.05,
-    celebrating: 0.7
-  }[orbState] ?? 0.12;
-  orbGroup.rotation.y += rotSpeed * dt;
-  orbGroup.rotation.x = Math.sin(performance.now() * 0.0003) * 0.08;
-
-  // Breathing scale on "speaking" state.
-  const t = performance.now() * 0.0017;
-  const breath = orbState === 'speaking'
-    ? 1 + Math.sin(t * 4) * 0.025
-    : 1 + Math.sin(t * 1.5) * 0.012;
-  orbGroup.scale.setScalar(breath);
-
-  // Window-scene iterator orbit (when visible).
-  if (windowScene.visible) {
-    iteratorAngle += dt * 0.95;       // ~1 lap per ~6.5s
-    const a = iteratorAngle;
-    const orbitR = 0.45;
-    iterator.position.set(Math.cos(a) * orbitR, 0, Math.sin(a) * orbitR);
-    torus.rotation.z += dt * 0.4;
-  }
-
-  // Halo subtle rotation.
-  halo.rotation.z -= dt * 0.05;
-
-  renderer.render(scene, camera);
-  requestAnimationFrame(frame);
-}
-frame();
-
-// Offset the orb leftward on desktop so it visually balances the right-side
-// notes panel. On mobile (panel docked at bottom) keep the orb centred.
-function applyOrbOffset() {
-  const isMobile = window.innerWidth <= 768;
-  orbGroup.position.x = isMobile ? 0 : -0.85;
-}
-applyOrbOffset();
-
-// Resize.
-window.addEventListener('resize', () => {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  applyOrbOffset();
-});
+setOrbState('thinking');
 
 // ─────────────────────────────────────────────────────────────────────
-// 7.  Window-scene loop sync → highlight code line on each iterator pass.
-//     The iterator "crosses" the front of the torus (a ≈ π/2 in our orbit)
-//     once per lap; we use that as the "tick" for advancing print(i).
+// 2.  Pacing helpers (no 3D — old morph stages become readable pauses)
 // ─────────────────────────────────────────────────────────────────────
-let lastTick = -1;
+// All previous Three.js morph calls (setShape('infinity'), etc.) are kept
+// in the flow code as named pauses so each beat still has its own weight.
+// We just translate the morph duration → a sleep of the same length.
+function setShape(name, opts = {}) {
+  const d = (opts.duration ?? 0.85) * 1000;
+  return sleep(d);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 3.  Iterator tick (drives code-line highlight in Act 2)
+//     Cycles slot 0..4 at ~1.3 s per beat — reads like a running loop.
+// ─────────────────────────────────────────────────────────────────────
 function onIteratorTick(callback) {
-  // returns a small interval-based watcher (no extra rAF).
+  let slot = -1;
   return setInterval(() => {
-    // 1 lap = 2π / 0.95 ≈ 6.6s — we just sample iteratorAngle mod 2π.
-    const phase = ((iteratorAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-    const slot = Math.floor(phase / (Math.PI * 2 / 5));  // 0..4
-    if (slot !== lastTick) {
-      lastTick = slot;
-      callback(slot);
-    }
-  }, 80);
+    slot = (slot + 1) % 5;
+    callback(slot);
+  }, 1300);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1256,54 +898,50 @@ async function runLoopsFlow() {
   setAct(1);
   setOrbState('thinking');
   showNotesPanel();
-  await sleep(700);
+  await sleep(900);
 
   setOrbState('speaking');
   addPhrase({ html: '<em>Loops</em>?',        anchor: 'tl', size: 'xl', tilt: -3 });
-  await setShape('infinity', { duration: 0.85 });
-  await sleep(700);
+  await setShape('infinity', { duration: 1.0 });
+  await sleep(1200);
   if (abortFlag) return;
 
   addPhrase({ html: 'Tema mea<br><em>preferată</em>.', anchor: 'c', size: 'l', tilt: 0 });
-  await setShape('heart', { duration: 0.9 });
+  await setShape('heart', { duration: 1.0 });
   addMemo('Cikluri = ритм повторения');
-  await sleep(900);
+  await sleep(1500);
   if (abortFlag) return;
 
   addPhrase({ html: 'Uite.', anchor: 'br', size: 'l', tilt: 5 });
-  await setShape('arrow', { duration: 0.7 });
-  await sleep(700);
+  await setShape('arrow', { duration: 0.9 });
+  await sleep(1200);
   if (abortFlag) return;
 
   // Transition to Act 2: collapse phrases, reveal window scene.
   await clearPhrases();
   setAct(2);
 
-  // ── Act 2 — Твой ход (code + iterator running) ──────────────────
+  // ── Act 2 — Твой ход (code + running iterator highlight) ────────
   setOrbState('speaking');
-  windowScene.visible = true;
-  gsap.fromTo(windowScene.scale, { x: 0, y: 0, z: 0 }, {
-    x: 0.6, y: 0.6, z: 0.6, duration: 0.75, ease: 'back.out(1.6)'
-  });
-  await setShape('range', { duration: 0.95 });
+  await setShape('range', { duration: 1.0 });
 
   // Type code into notes panel line by line.
   for (let i = 0; i < codeLines.length; i++) {
     typeCodeLines(i);
-    await sleep(220);
+    await sleep(260);
     if (abortFlag) return;
   }
 
   addGlossary('range(a,b)', '— числа от a до b−1');
   addPhrase({ html: 'Asta e <em>range</em>.', anchor: 't',  size: 'm', tilt: 0 });
-  await sleep(900);
+  await sleep(1400);
   addPhrase({ html: 'De la <em>1</em>...',    anchor: 'tl', size: 'm', tilt: -2 });
-  await sleep(700);
+  await sleep(1200);
   addPhrase({ html: '... până la <em>6</em>.', anchor: 'br', size: 'm', tilt: 3 });
-  await sleep(800);
+  await sleep(1300);
   addPhrase({ html: 'Dar <em>6 NU intră</em>.', anchor: 'c', size: 'l', tilt: 0 });
   addMemo('range(1,6) → последнее <b>не включается</b>');
-  await sleep(1000);
+  await sleep(1600);
   if (abortFlag) return;
 
   // Start iterator orbit "tick" → highlight comment lines 3..7 in sync.
@@ -1315,11 +953,11 @@ async function runLoopsFlow() {
 
   // Cards interaction.
   await clearPhrases();
-  await sleep(200);
+  await sleep(400);
   setOrbState('listening');
-  await setShape('sphere', { duration: 0.7 });
+  await setShape('sphere', { duration: 0.8 });
   addPhrase({ html: 'Acum tu.', anchor: 'tl', size: 'l', tilt: -2 });
-  await sleep(450);
+  await sleep(700);
 
   const result = await runCards({
     prompt: 'Atinge numerele din <code>range(1, 6)</code>',
@@ -1345,14 +983,14 @@ async function runLoopsFlow() {
   }
   addMemo('aha: range(1,6) = [1, 2, 3, 4, 5]');
 
-  await setShape('lightbulb', { duration: 0.85 });
-  await sleep(450);
-  await setShape('explode', { duration: 0.7, ease: 'expo.out' });
+  await setShape('lightbulb', { duration: 1.0 });
+  await sleep(700);
+  await setShape('explode', { duration: 0.9, ease: 'expo.out' });
   showAha();
-  await sleep(1800);
-  await setShape('sphere', { duration: 1.1, ease: 'expo.out' });
+  await sleep(2200);
+  await setShape('sphere', { duration: 1.2, ease: 'expo.out' });
   setOrbState('thinking');
-  await sleep(1400);
+  await sleep(1700);
   hideAha();
   if (tickWatcher) { clearInterval(tickWatcher); tickWatcher = null; }
 }
@@ -1375,13 +1013,7 @@ function resetAll() {
   memoList.innerHTML = '';
   glosList.innerHTML = '';
   renderCode();
-  // Window scene hidden.
-  windowScene.visible = false;
-  windowScene.scale.setScalar(0);
-  iteratorAngle = 0;
-  lastTick = -1;
   setOrbState('thinking');
-  setShape('sphere', { duration: 0.4 });
   setAct(1);
   hidePointer();
 }
@@ -1399,9 +1031,7 @@ document.querySelectorAll('.c3d-dev [data-jump]').forEach((btn) => {
     } else if (j === 2) {
       // Jump to act 2 — code + range
       setAct(2);
-      windowScene.visible = true;
-      windowScene.scale.setScalar(0.6);
-      await setShape('range', { duration: 0.6 });
+      setOrbState('speaking');
       for (let i = 0; i < codeLines.length; i++) typeCodeLines(i);
       if (tickWatcher) clearInterval(tickWatcher);
       tickWatcher = onIteratorTick((slot) => highlightRunningLine(3 + slot));
