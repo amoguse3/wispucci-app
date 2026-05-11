@@ -885,6 +885,15 @@ body.layout-stage .c3d-phrases { display: none; }
   .c3d-actbar .sep { width: 10px; }
   .c3d-dev { max-width: 92vw; }
 }
+
+/* ─── Embed mode (when this demo is loaded inside the Wispucci app
+   as the lesson view) ────────────────────────────────────────────── */
+html.c3d-embed .c3d-dev,
+html.c3d-embed .c3d-meta,
+html.c3d-embed .c3d-badge { display: none !important; }
+html.c3d-embed body {
+  background: transparent;
+}
 </style>
 </head>
 <body>
@@ -1469,7 +1478,7 @@ function hideAha() {
 const mostreSkip = $('mostreSkip');
 let mostreSkipFlag = false;
 
-const MOSTRE = [
+let MOSTRE = [
   {
     codeHTML:
       '<span class="tok-kw">for</span> <span class="tok-var">i</span> <span class="tok-kw">in</span> ' +
@@ -1569,7 +1578,7 @@ const flashFrame = flashDeck.querySelector('.c3d-flash-frame');
 const flashNextBtn = $('flashNext');
 const flashSkipBtn = $('flashSkip');
 
-const FLASH_CARDS = [
+let FLASH_CARDS = [
   {
     tag: 'Regula 1',
     title: '<em>range(N)</em> nu include N.',
@@ -1748,7 +1757,7 @@ function attachFlashDrag(el) {
 // ─────────────────────────────────────────────────────────────────────
 // 11. Practica (Act 5) — 4 MC questions + try-again-with-hint.
 // ─────────────────────────────────────────────────────────────────────
-const PRACTICA = [
+let PRACTICA = [
   {
     code: 'for i in range(4):\n    print(i)',
     prompt: 'Ce afișează?',
@@ -2036,7 +2045,7 @@ function showFinale(stars) {
 const glossBtn = $('glossBtn');
 const glossPop = $('glossPop');
 const glossList = $('glossList');
-const GLOSS = [
+let GLOSS = [
   ['range(N)',      'numere de la <em>0</em> la <em>N-1</em>'],
   ['range(a, b)',   'de la a (inclus) la b (exclus)'],
   ['range(a, b, k)','cu pas k (step)'],
@@ -2064,7 +2073,296 @@ document.addEventListener('click', (e) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// 14. Main flow — Python "Loops" lesson, 5 acts.
+// 13b. LESSON CONTENT LAYER
+//
+// This block is the seam between the cinema demo (which was hardcoded
+// for the Python `range(N)` lesson) and the rest of the Wispucci app
+// (which generates lessons with arbitrary topics — language, math, life
+// skills, code, anything).
+//
+// When the demo is opened directly (no parent / no postMessage), the
+// defaults below preserve the original 5-act `range(N)` experience.
+// When the parent app embeds this page in an <iframe>, it posts a
+// message of the form:
+//
+//   { type: 'wispucci:lesson',
+//     lesson: { id, title, body, practice: { hook, exercises, cards, ... }},
+//     moduleTitle, topic, lessonIdx, moduleLessons }
+//
+// and we rebuild INTRO_PHRASES / AHA_PHRASES / MOSTRE_PHRASES (non-code
+// fallback) / FLASH_CARDS / PRACTICA / GLOSS from that lesson, then
+// restart the flow with the new content.
+// ─────────────────────────────────────────────────────────────────────
+
+// Detect embed mode: parent passed ?embed=1 (or we're inside a frame).
+const EMBED_MODE = (function () {
+  try {
+    return new URLSearchParams(location.search).get('embed') === '1'
+      || (window.parent && window.parent !== window);
+  } catch (_) { return false; }
+})();
+
+// Default Act 1 / Act 3 phrase scripts — the original Python lesson.
+let INTRO_PHRASES = [
+  { html: '<em>Loops</em>?',                  anchor: 'tl', size: 'xl', tilt: -3, hold: 1100 },
+  { html: 'Tema mea<br><em>preferată</em>.',  anchor: 'c',  size: 'l',           hold: 1300 },
+  { html: 'Uite.',                            anchor: 'br', size: 'l', tilt:  5, hold: 1100 }
+];
+let AHA_PHRASES = [
+  { html: '<em>Perfect.</em>',                anchor: 'tl', size: 'xl', tilt: -4 },
+  { html: 'Acum şti <em>range(N)</em>.',      anchor: 'br', size: 'l',  tilt:  4 }
+];
+// Non-code fallback for Act 4 ("Mai mult") when the lesson has no code
+// for the interactive stage. Each entry is a phrase shown for ~2.2s.
+let MOSTRE_PHRASES = [];
+// Whether the lesson should run the interactive code stage (Act 2) and
+// the auto-walkthrough code samples (Act 4). True for the default Python
+// lesson; false for non-code lessons (language, life skills, etc).
+let LESSON_HAS_INTERACTIVE = true;
+// Caption shown above the interactive code stage in Act 2.
+let STAGE_CAPTION_HTML = 'Atinge un <em>număr</em> &mdash; vezi cum se mişcă <em>range(N)</em>';
+
+/** Play a list of phrases sequentially. Each phrase: { html, anchor, size, tilt, hold }. */
+async function playPhrases(list, alive) {
+  if (!Array.isArray(list) || list.length === 0) return;
+  for (const p of list) {
+    if (alive && !alive()) return;
+    addPhrase({ html: p.html, anchor: p.anchor || 'c', size: p.size || 'l', tilt: p.tilt || 0 });
+    await sleep(typeof p.hold === 'number' ? p.hold : 1200);
+  }
+}
+
+/** Plain-text → HTML escaping. */
+function _escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** Strip markdown-ish formatting so a heading/paragraph fits a phrase cell. */
+function _stripMd(s) {
+  return String(s || '')
+    .replace(/```[\s\S]*?```/g, '')          // fenced code → drop
+    .replace(/`([^`]+)`/g, '$1')             // inline code → bare
+    .replace(/\*\*([^*]+)\*\*/g, '$1')       // bold
+    .replace(/\*([^*]+)\*/g, '$1')           // italic
+    .replace(/^#{1,6}\s+/gm, '')             // heading markers
+    .replace(/\n+/g, ' ').trim();
+}
+
+/** Pick the first fenced code block out of the lesson body, if any. */
+function _firstCodeBlock(body) {
+  const m = String(body || '').match(/```(?:[\w-]+)?\n([\s\S]*?)```/);
+  return m ? m[1].trim() : null;
+}
+
+/** Split the lesson body into clean paragraphs (no code, no headings). */
+function _bodyParagraphs(body) {
+  return String(body || '')
+    .split(/```[\s\S]*?```/).join('\n\n')  // drop fenced code blocks
+    .split(/\n{2,}/)
+    .map(_stripMd)
+    .filter(p => p && p.length > 1);
+}
+
+/** Truncate a phrase to fit ≤ ~8 words so it doesn't break the magazine spread. */
+function _shortPhrase(s, maxWords = 8) {
+  const words = String(s || '').split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return _escHtml(words.join(' '));
+  return _escHtml(words.slice(0, maxWords).join(' ')) + '…';
+}
+
+/** Turn a lesson object into the cinema content arrays. */
+function lessonToCinemaContent(payload) {
+  const lesson = (payload && payload.lesson) || {};
+  const title = String(lesson.title || 'Lecția').trim();
+  const topic = String((payload && payload.topic) || (payload && payload.moduleTitle) || '').trim();
+  const body  = String(lesson.body || '');
+  const practice = lesson.practice || {};
+  const hook  = String(practice.hook || '').trim();
+  const paragraphs = _bodyParagraphs(body);
+
+  const code = _firstCodeBlock(body);
+  const hasInteractive = !!code;
+
+  // Pick a "topic noun" for the hook: prefer the last meaningful word
+  // of the title (usually the noun in Romanian), fall back to first word.
+  const titleWords = title.split(/\s+/).filter(Boolean);
+  const STOP_RO = new Set(['de', 'ce', 'cu', 'în', 'la', 'pe', 'şi', 'și', 'a', 'al', 'o', 'un', 'o', 'şi', 'fără', 'pentru', 'între', 'cum', 'ce']);
+  const topicWord = (function () {
+    for (let i = titleWords.length - 1; i >= 0; i--) {
+      const w = titleWords[i].toLowerCase().replace(/[.,;:!?]/g, '');
+      if (w.length > 2 && !STOP_RO.has(w)) return titleWords[i];
+    }
+    return titleWords[0] || 'Lecția';
+  })();
+
+  // ── Act 1 — Intro phrases ────────────────────────────────────────
+  // Lead with the topic-noun as a question, then the full title.
+  const intro = [];
+  intro.push({ html: '<em>' + _escHtml(topicWord) + '</em>?', anchor: 'tl', size: 'xl', tilt: -3, hold: 1200 });
+  if (titleWords.length > 1) {
+    intro.push({ html: _shortPhrase(title, 7), anchor: 'c', size: 'l', hold: 1500 });
+  } else if (hook) {
+    intro.push({ html: _shortPhrase(hook, 8), anchor: 'c', size: 'l', hold: 1500 });
+  } else if (paragraphs[0]) {
+    intro.push({ html: _shortPhrase(paragraphs[0], 8), anchor: 'c', size: 'l', hold: 1500 });
+  }
+  intro.push({ html: 'Uite.', anchor: 'br', size: 'l', tilt: 5, hold: 1000 });
+
+  // ── Act 3 — Aha phrases ──────────────────────────────────────────
+  const aha = [
+    { html: '<em>Perfect.</em>', anchor: 'tl', size: 'xl', tilt: -4 }
+  ];
+  if (hook) {
+    aha.push({ html: _shortPhrase(hook, 7), anchor: 'br', size: 'l', tilt: 4 });
+  } else {
+    aha.push({ html: 'Acum şti <em>' + _escHtml(topicWord) + '</em>.', anchor: 'br', size: 'l', tilt: 4 });
+  }
+
+  // ── Act 4 — "Mostre" phrases. We always use phrase-based walkthrough
+  // here because generating coherent code walkthroughs from arbitrary
+  // lesson bodies is unreliable; code lessons still get the interactive
+  // Act 2 above. ────────────────────────────────────────────────────
+  const mostrePhrases = [];
+  const picks = paragraphs.slice(hasInteractive ? 1 : 0, hasInteractive ? 4 : 3);
+  if (picks.length > 0) {
+    mostrePhrases.push({ html: '<em>Mai mult.</em>', anchor: 't', size: 'l', hold: 900 });
+    picks.forEach((p, idx) => {
+      const anchors = ['tl', 'c', 'br'];
+      mostrePhrases.push({
+        html: _shortPhrase(p, 12),
+        anchor: anchors[idx % anchors.length],
+        size: idx === 1 ? 'l' : 'm',
+        tilt: idx === 0 ? -2 : (idx === 2 ? 2 : 0),
+        hold: 2200
+      });
+    });
+  }
+
+  // ── Flash deck (pre-Act 5) — use practice.cards if any, else top paragraphs ──
+  const flash = [];
+  if (Array.isArray(practice.cards) && practice.cards.length > 0) {
+    practice.cards.slice(0, 4).forEach((c, idx) => {
+      flash.push({
+        tag: 'Card ' + (idx + 1),
+        title: _shortPhrase(c.front || c.q || c.term || ('Card ' + (idx + 1)), 6).replace(/&#39;/g, "'"),
+        body: _escHtml(_stripMd(c.back || c.a || c.definition || c.front || '')),
+        hint: idx < (practice.cards.length - 1) ? 'glisează →' : 'gata'
+      });
+    });
+  } else if (paragraphs.length >= 2) {
+    paragraphs.slice(0, 3).forEach((p, idx) => {
+      const words = p.split(/\s+/);
+      flash.push({
+        tag: 'Punct ' + (idx + 1),
+        title: _escHtml(words.slice(0, 4).join(' ')) + (words.length > 4 ? '…' : ''),
+        body: _escHtml(p.slice(0, 180)),
+        hint: idx < 2 ? 'glisează →' : 'gata'
+      });
+    });
+  }
+
+  // ── PRACTICA (Act 5 MC) — only `choice` exercises with answers[] ──
+  const practica = [];
+  if (Array.isArray(practice.exercises)) {
+    practice.exercises.forEach((ex) => {
+      if (!ex || ex.type !== 'choice') return;
+      const answers = Array.isArray(ex.answers || ex.options) ? (ex.answers || ex.options) : [];
+      if (answers.length < 2) return;
+      const correct = (typeof ex.correct === 'number') ? ex.correct
+                     : (typeof ex.answer  === 'number') ? ex.answer  : 0;
+      practica.push({
+        code: String(ex.code || ex.snippet || ''),
+        prompt: _escHtml(_stripMd(ex.prompt || ex.q || ex.question || '')),
+        answers: answers.map(a => _escHtml(_stripMd(String(a)))),
+        correct: Math.max(0, Math.min(answers.length - 1, correct)),
+        hint: _escHtml(_stripMd(ex.hint || ex.explanation || ''))
+      });
+    });
+  }
+
+  // ── GLOSS — extract `inline code` words from body as glossary terms ──
+  const gloss = [];
+  const seenTerm = new Set();
+  const codeMatches = body.match(/`([^`]+)`/g) || [];
+  codeMatches.slice(0, 6).forEach(m => {
+    const term = m.replace(/`/g, '').trim();
+    if (!term || seenTerm.has(term)) return;
+    seenTerm.add(term);
+    gloss.push([term, 'din lecția curentă']);
+  });
+
+  // ── Stage code (Act 2) — only if we have a code block ────────────
+  let stageCaption = STAGE_CAPTION_HTML;
+  if (hasInteractive) {
+    stageCaption = 'Atinge un <em>număr</em> &mdash; vezi cum rulează codul';
+  }
+
+  return {
+    intro: intro,
+    aha: aha,
+    mostrePhrases: mostrePhrases,
+    flash: flash,
+    practica: practica,
+    gloss: gloss,
+    hasInteractive: hasInteractive,
+    stageCaption: stageCaption,
+    title: title,
+    topic: topic
+  };
+}
+
+/** Swap the cinema content arrays for the given content, then restart. */
+function applyLessonContent(payload) {
+  const content = lessonToCinemaContent(payload);
+  INTRO_PHRASES       = content.intro;
+  AHA_PHRASES         = content.aha;
+  MOSTRE_PHRASES      = content.mostrePhrases;
+  // Clear the Python-specific code walkthrough — lessons get a
+  // phrase-based Act 4 instead (see MOSTRE_PHRASES branch in
+  // runLoopsFlow). The original MOSTRE array stays available for
+  // standalone mode only.
+  MOSTRE              = [];
+  FLASH_CARDS         = content.flash;
+  PRACTICA            = content.practica;
+  GLOSS               = content.gloss;
+  LESSON_HAS_INTERACTIVE = content.hasInteractive;
+  STAGE_CAPTION_HTML  = content.stageCaption;
+  // Rebuild the glossary footer with the new terms.
+  if (typeof buildGloss === 'function') {
+    try { buildGloss(); } catch (_) { /* glossary host may not exist yet */ }
+  }
+}
+
+/** Listen for lesson payloads from the parent app. */
+window.addEventListener('message', (e) => {
+  const data = e && e.data;
+  if (!data || typeof data !== 'object') return;
+  if (data.type !== 'wispucci:lesson') return;
+  try {
+    stopActiveFlow();
+    setTimeout(() => {
+      applyLessonContent(data);
+      resetAll();
+      runLoopsFlow();
+    }, 100);
+  } catch (err) {
+    console.warn('cinema: failed to apply lesson', err);
+  }
+});
+
+// In embed mode, suppress dev controls + auto-start; wait for the
+// parent to post the lesson payload. Standalone mode keeps the defaults.
+if (EMBED_MODE) {
+  document.documentElement.classList.add('c3d-embed');
+  // Tell parent we're alive and ready to receive lesson data.
+  try { window.parent && window.parent.postMessage({ type: 'wispucci:ready' }, '*'); } catch (_) { /* not embedded */ }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 14. Main flow — runs whichever content is currently loaded (default
+// Python `range(N)`, or whatever the parent app posted in).
 // ─────────────────────────────────────────────────────────────────────
 let flowGen = 0;
 function stopActiveFlow() { flowGen++; iterToken++; mostreSkipFlag = true; }
@@ -2083,40 +2381,41 @@ async function runLoopsFlow() {
   await sleep(700); if (!alive()) return;
 
   setOrbState('speaking');
-  addPhrase({ html: '<em>Loops</em>?',          anchor: 'tl', size: 'xl', tilt: -3 });
-  await sleep(1100); if (!alive()) return;
-  addPhrase({ html: 'Tema mea<br><em>preferată</em>.', anchor: 'c', size: 'l' });
-  await sleep(1300); if (!alive()) return;
-  addPhrase({ html: 'Uite.', anchor: 'br', size: 'l', tilt: 5 });
-  await sleep(1100); if (!alive()) return;
-
-  // ── Act 2 — Tu (focused stage, interactive) ──────────────────────
-  await clearPhrases(); if (!alive()) return;
-  setAct(2);
-  setLayoutMode('stage');
-  setOrbState('listening');
-  setOrbEmotion('neutral');
-  renderActTwoStageCode();
-  setStageCaption('Atinge un <em>număr</em> &mdash; vezi cum se mişcă <em>range(N)</em>');
-  stageHint.textContent = '↓ alege N';
-  clearStageOutput();
-
-  await sleep(550); if (!alive()) return;
-  const result = await runExperiment();
-  hidePointer();
+  await playPhrases(INTRO_PHRASES, alive);
   if (!alive()) return;
 
-  // ── Act 3 — Aha (Cascade spread + XP overlay) ───────────────────
-  await hideExperiment(); if (!alive()) return;
-  await sleep(280); if (!alive()) return;
+  // Act 2 — Tu (focused stage, interactive) — only for code lessons.
+  if (LESSON_HAS_INTERACTIVE) {
+    await clearPhrases(); if (!alive()) return;
+    setAct(2);
+    setLayoutMode('stage');
+    setOrbState('listening');
+    setOrbEmotion('neutral');
+    renderActTwoStageCode();
+    setStageCaption(STAGE_CAPTION_HTML);
+    stageHint.textContent = '↓ alege N';
+    clearStageOutput();
+
+    await sleep(550); if (!alive()) return;
+    const result = await runExperiment();
+    hidePointer();
+    if (!alive()) return;
+    await hideExperiment(); if (!alive()) return;
+    await sleep(280); if (!alive()) return;
+  } else {
+    // Non-code lesson: mark Act 2 done so the wayfinding bar advances cleanly.
+    setAct(2);
+    await sleep(400); if (!alive()) return;
+  }
+
+  // Act 3 — Aha (Cascade spread + XP overlay).
   setLayoutMode('spread');
   setSpreadVariant('cascade');
   setAct(3);
   setOrbState('celebrating');
   setOrbEmotion('celebrating');
 
-  addPhrase({ html: '<em>Perfect.</em>',          anchor: 'tl', size: 'xl', tilt: -4 });
-  addPhrase({ html: 'Acum şti <em>range(N)</em>.', anchor: 'br', size: 'l',  tilt: 4 });
+  await playPhrases(AHA_PHRASES, alive);
 
   await sleep(900); if (!alive()) return;
   showAha();
@@ -2124,26 +2423,47 @@ async function runLoopsFlow() {
   hideAha();
   await sleep(400); if (!alive()) return;
 
-  // ── Act 4 — Mai mult / Mostre (Orbital spread + auto demos) ─────
+  // Act 4 — Mai mult / Mostre (Orbital spread + auto demos OR fallback phrases).
   await clearPhrases(); if (!alive()) return;
   setAct(4);
-  await runMostre();
-  if (!alive()) return;
+  if (LESSON_HAS_INTERACTIVE && Array.isArray(MOSTRE) && MOSTRE.length > 0) {
+    await runMostre();
+    if (!alive()) return;
+  } else if (Array.isArray(MOSTRE_PHRASES) && MOSTRE_PHRASES.length > 0) {
+    setLayoutMode('spread');
+    setSpreadVariant('orbital');
+    setOrbState('speaking');
+    setOrbEmotion('neutral');
+    await playPhrases(MOSTRE_PHRASES, alive);
+    if (!alive()) return;
+  }
 
-  // ── Act 5 — Practică (flash deck → 4 MC → finale) ───────────────
+  // Act 5 — Practică (flash deck → MC questions → finale).
   await clearPhrases(); if (!alive()) return;
   setLayoutMode('spread');
-  // Flash deck (Pokémon-Go) — Spotlight feel
   setSpreadVariant('spotlight');
   setAct(5);
-  await openFlashDeck();
-  if (!alive()) return;
+  if (Array.isArray(FLASH_CARDS) && FLASH_CARDS.length > 0) {
+    await openFlashDeck();
+    if (!alive()) return;
+  }
 
-  await runPractica();
-  if (!alive()) return;
+  if (Array.isArray(PRACTICA) && PRACTICA.length > 0) {
+    await runPractica();
+    if (!alive()) return;
+  } else {
+    setLayoutMode('spread');
+    setSpreadVariant('spotlight');
+    setOrbEmotion('celebrating');
+    addPhrase({ html: '<em>Gata.</em>', anchor: 'c', size: 'xxl' });
+    await sleep(1800); if (!alive()) return;
+  }
 
-  // After finale closes, show the glossary footer button for review.
-  showGlossButton();
+  // Tell the embedding app that the lesson flow finished (used by parent
+  // to record completion / show celebration). Best-effort — no-op standalone.
+  try { window.parent && window.parent.postMessage({ type: 'wispucci:complete' }, '*'); } catch (_) { /* not embedded */ }
+
+  if (Array.isArray(GLOSS) && GLOSS.length > 0) showGlossButton();
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -2204,8 +2524,7 @@ document.querySelectorAll('.c3d-dev [data-jump]').forEach((btn) => {
       setSpreadVariant('cascade');
       setOrbState('celebrating');
       setOrbEmotion('celebrating');
-      addPhrase({ html: '<em>Perfect.</em>',          anchor: 'tl', size: 'xl', tilt: -4 });
-      addPhrase({ html: 'Acum şti <em>range(N)</em>.', anchor: 'br', size: 'l',  tilt: 4 });
+      await playPhrases(AHA_PHRASES, () => true);
       await sleep(500);
       showAha();
     } else if (j === 4) {
@@ -2232,9 +2551,16 @@ $('replay').addEventListener('click', async () => {
 
 // ─────────────────────────────────────────────────────────────────────
 // 16. Auto-start.
+//
+// Standalone mode: kick off the default Python `range(N)` flow.
+// Embed mode: stay idle on the welcome state — the parent will
+// postMessage `wispucci:lesson` and `applyLessonContent` will trigger
+// the flow with the real generated lesson content.
 // ─────────────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  setTimeout(() => runLoopsFlow(), 350);
+  if (!EMBED_MODE) {
+    setTimeout(() => runLoopsFlow(), 350);
+  }
 });
 </script>
 </body>

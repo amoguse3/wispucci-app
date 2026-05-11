@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./style.css?v=28" />
+<link rel="stylesheet" href="./style.css?v=29" />
 </head>
 <body>
 
@@ -459,148 +459,42 @@
         <span class="muted">Curs</span>
       </div>
       <div class="ctxbar-r">
-        <button class="btn-ghost" id="focusModeBtn">Mod focus</button>
-        <button class="btn-ghost" id="pauseBtn">Pauză</button>
+        <button class="btn-ghost" data-go="home" id="lessonExitBtn" type="button">← Acasă</button>
       </div>
     </div>
 
-    <main class="lesson-grid">
-      <!-- Orb companion -->
-      <aside class="orb-side">
-        <div class="orb-lesson-host" data-orb-host="lesson"></div>
-        <div class="orb-state-label" id="orbState">ascultă</div>
-        <div class="orb-bubble" id="orbBubble">
-          Spune „Explică-mi" dacă ceva nu e clar.
+    <!--
+      Cinematic 5-act lesson player. The actual demo lives in
+      cinema-3d-demo.html so it stays runnable standalone (open the file
+      directly to see the original Python-loops cinema demo). When this
+      view becomes active, app.js postMessages the *generated* lesson into
+      the iframe and the demo replaces its hardcoded content with that.
+    -->
+    <main class="lesson-cinema-host">
+      <iframe
+        class="lesson-cinema-frame"
+        id="lessonCinemaFrame"
+        src="about:blank"
+        title="Cinematic lesson player"
+        loading="lazy"
+      ></iframe>
+      <div class="lesson-cinema-skeleton" id="lessonCinemaSkeleton">
+        <div class="lesson-cinema-orb">
+          <div class="orb orb-deco"><div class="orb-core"><div class="orb-shine"></div></div></div>
         </div>
-      </aside>
-
-      <!-- Lesson card -->
-      <article class="lesson-card">
-        <div class="tabs">
-          <button class="tab is-active" data-tab="theory">Teorie</button>
-          <button class="tab" data-tab="practice" hidden>Exercițiu</button>
-          <button class="tab" data-tab="game" hidden>Joc</button>
-          <button class="tab tab-side" data-tab="notes" title="Notele tale">Note</button>
-        </div>
-
-        <div class="tab-pane is-active" data-pane="theory">
-          <!-- Populated by applyLessonToView() with the generated lesson body. -->
-          <h3 class="lesson-title">Lecția se pregătește…</h3>
-          <p class="lesson-meta"><em>Wispucci scrie pentru tine</em></p>
-          <div class="skeleton-line" style="width:90%"></div>
-          <div class="skeleton-line" style="width:80%"></div>
-          <div class="skeleton-line" style="width:70%"></div>
-        </div>
-
-        <div class="tab-pane" data-pane="game">
-          <div class="minigame-host" id="minigameHost">
-            <div class="minigame-empty muted">
-              Wispucci pregătește un joc scurt pentru această lecție…
-            </div>
-          </div>
-        </div>
-
-        <div class="tab-pane" data-pane="practice">
-          <!-- Populated by applyLessonToView() with the generated exercise. -->
-          <p class="muted">Exercițiul apare după ce lecția e gata.</p>
-        </div>
-
-        <div class="tab-pane" data-pane="cards">
-          <!-- Populated by applyLessonToView() with the generated cards.
-               50/50 endgame stage: half the lessons see cards, half see
-               practice (deterministic per lesson id, so refresh stays stable). -->
-          <h3 class="lesson-title"><em>Repetiție</em> rapidă</h3>
-          <p class="lesson-meta muted">3 carduri scurte. Întoarce, citește, treci mai departe.</p>
-          <div class="cards-deck" id="cardsDeck">
-            <div class="card-flip" data-cards-flip>
-              <div class="card-flip-inner">
-                <div class="card-flip-face card-flip-front" data-cards-front>—</div>
-                <div class="card-flip-face card-flip-back" data-cards-back>—</div>
-              </div>
-            </div>
-          </div>
-          <div class="cards-foot">
-            <button class="btn-ghost" id="cardsPrevBtn" disabled>← Anterior</button>
-            <button class="btn-ghost" id="cardsFlipBtn">Întoarce</button>
-            <button class="btn btn-primary" id="cardsNextBtn">Cardul următor →</button>
-          </div>
-          <p class="cards-meta muted small"><span data-cards-idx>1</span> / <span data-cards-total>3</span></p>
-        </div>
-
-        <div class="tab-pane" data-pane="notes">
-          <h3 class="lesson-title"><em>Notele</em> tale</h3>
-          <p class="lesson-body muted">Scrie cu mâna ta ce ai înțeles. Aceste note rămân ale tale.</p>
-          <textarea class="notes-area" placeholder="Funcția primește o valoare prin paranteze. Numele din paranteze e parametrul, valoarea efectivă e argumentul…"></textarea>
-        </div>
-
-        <!-- Persistent card-level nav (always visible across stages) -->
-        <div class="lesson-nav">
-          <button class="btn-ghost" id="prevStep" disabled>← Pasul anterior</button>
-          <button class="btn btn-primary" id="nextStep" disabled>Pas următor →</button>
-        </div>
-      </article>
+        <p class="muted small">Wispucci pregătește lecția…</p>
+      </div>
     </main>
 
-    <!-- Progress -->
-    <footer class="lesson-progress">
-      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-      <div class="progress-meta">
-        <span id="progressPct">0%</span>
-        <span class="muted">din modul</span>
-      </div>
-    </footer>
-
-    <!-- "Explain me" floating chip -->
-    <div class="explain-chip" id="explainChip">
-      <span>Explică-mi</span>
-      <span class="explain-chip-dot"></span>
-    </div>
-
-    <!-- Inline explanation popover -->
-    <div class="explain-popover" id="explainPopover">
-      <div class="explain-head">
-        <div class="orb-tiny"><div class="orb orb-deco"><div class="orb-core"><div class="orb-shine"></div></div></div></div>
-        <span>Wispucci explică</span>
-        <button class="explain-close" id="explainClose">×</button>
-      </div>
-      <div class="explain-pills">
-        <button class="pill is-on" data-mode="simple">Simplu</button>
-        <button class="pill" data-mode="example">Cu exemplu</button>
-        <button class="pill" data-mode="tech">Tehnic</button>
-      </div>
-      <div class="explain-body" id="explainBody">
-        <span class="muted">…</span>
-      </div>
-      <div class="explain-foot">
-        <button class="btn-ghost" id="saveWord">+ Salvează în vocabular</button>
-      </div>
-    </div>
-
-    <!-- Peak-end celebration overlay -->
-    <div class="celebrate" id="celebrate">
-      <canvas class="celebrate-fx" id="celebrateFx"></canvas>
-      <div class="celebrate-card">
-        <div class="celebrate-orb-host" data-orb-host="celebrate"></div>
-        <h3><em>Modul</em> terminat.</h3>
-        <p class="lead" data-celebrate-xp>+0 XP <span class="muted">· streak <span data-celebrate-streak>0</span> zile</span></p>
-        <p class="muted small" data-celebrate-next>Vino mâine pentru un modul nou.</p>
-        <!-- Next-course recommendation. Populated after celebrate() by
-             api.nextSuggestion(); hidden until we have a topic. -->
-        <div class="next-suggest" data-next-suggest hidden>
-          <span class="next-suggest-kicker">curs nou pentru tine</span>
-          <h4 class="next-suggest-title" data-next-suggest-title><em>—</em></h4>
-          <p class="next-suggest-why muted small" data-next-suggest-why></p>
-          <div class="next-suggest-meta">
-            <span class="next-suggest-skill" data-next-suggest-skill></span>
-            <span class="next-suggest-level" data-next-suggest-level></span>
-          </div>
-        </div>
-        <div class="cta-row">
-          <button class="btn-ghost" id="celebrateClose">Închide</button>
-          <button class="btn btn-primary" id="celebrateNext" data-next-suggest-cta>Înapoi la home</button>
-        </div>
-      </div>
-    </div>
+    <!-- Hidden DOM kept around so legacy applyLessonToView/initLesson
+         calls that still try to update lesson DOM no-op cleanly. -->
+    <div class="lesson-legacy-stub" id="orbBubble" hidden></div>
+    <div class="lesson-legacy-stub" id="orbState" hidden></div>
+    <div class="lesson-legacy-stub" id="minigameHost" hidden></div>
+    <div class="lesson-legacy-stub" id="progressFill" hidden></div>
+    <div class="lesson-legacy-stub" id="progressPct" hidden></div>
+    <div class="lesson-legacy-stub" id="prevStep" hidden></div>
+    <div class="lesson-legacy-stub" id="nextStep" hidden></div>
 
   </section>
 
@@ -909,6 +803,6 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/Flip.min.js"></script>
-<script src="./app.js?v=28"></script>
+<script src="./app.js?v=29"></script>
 </body>
 </html>

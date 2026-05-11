@@ -362,7 +362,10 @@ if (typeof ResizeObserver !== 'undefined') {
 // VIEW SWITCHING
 // =========================================================
 const VIEWS_WITH_ORB = new Set([
-  'welcome', 'auth-login', 'auth-signup', 'home', 'lesson', 'celebrate',
+  // 'lesson' intentionally omitted — the lesson view now hosts the
+  // cinema-3d-demo iframe, which renders its own orb inside the frame.
+  // Keeping the global FLIP orb visible would draw two orbs at once.
+  'welcome', 'auth-login', 'auth-signup', 'home', 'celebrate',
 ]);
 const PROTECTED_VIEWS = new Set(['home', 'lesson', 'stats', 'settings']);
 
@@ -421,6 +424,7 @@ function showView(name) {
       showView('onboarding-1');
       return;
     }
+    _ensureCinemaFrame();
     initLesson();
     applyLessonToView(state.currentLesson);
   }
@@ -952,11 +956,113 @@ async function _prefetchRemainingLessons(outline) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// CINEMA LESSON BRIDGE
+// ─────────────────────────────────────────────────────────────────────
+// The lesson view is now a single iframe pointing at cinema-3d-demo.html.
+// We talk to it via postMessage. The demo runs standalone with its own
+// hardcoded Python-loops content when opened directly; here we override
+// that with the *generated* lesson (title, body, hook, exercises, cards).
+//
+// Messages we send (to iframe):
+//   { type: 'wispucci:lesson',
+//     lesson:      { id, title, body, practice, ... },
+//     moduleTitle: string,
+//     lessonIdx:   number,
+//     topic:       string }
+// Messages we receive (from iframe):
+//   { type: 'wispucci:exit' }      // user wants to leave the cinema
+//   { type: 'wispucci:complete' }  // user finished all 5 acts
+// ─────────────────────────────────────────────────────────────────────
+const CINEMA_FRAME_SRC = './cinema-3d-demo.html?embed=1';
+let _cinemaFrameReady = false;
+let _cinemaPending = null;
+
+function _cinemaFrame() {
+  return document.getElementById('lessonCinemaFrame');
+}
+function _cinemaSkeleton() {
+  return document.getElementById('lessonCinemaSkeleton');
+}
+
+function _ensureCinemaFrame() {
+  const frame = _cinemaFrame();
+  if (!frame) return;
+  if (frame.src && frame.src !== 'about:blank' && !frame.src.endsWith('about:blank')) return;
+  frame.addEventListener('load', () => {
+    frame.classList.add('is-ready');
+    const sk = _cinemaSkeleton();
+    if (sk) sk.classList.add('is-hidden');
+    _cinemaFrameReady = true;
+    if (_cinemaPending) {
+      _postToCinema(_cinemaPending);
+      _cinemaPending = null;
+    }
+  }, { once: true });
+  frame.src = CINEMA_FRAME_SRC;
+}
+
+function _postToCinema(payload) {
+  const frame = _cinemaFrame();
+  if (!frame) return;
+  if (!_cinemaFrameReady || !frame.contentWindow) {
+    _cinemaPending = payload;
+    return;
+  }
+  try {
+    frame.contentWindow.postMessage(payload, '*');
+  } catch (err) {
+    console.warn('cinema postMessage failed', err);
+  }
+}
+
+function _postLessonToCinema(lesson) {
+  if (!lesson) return;
+  const mod = state.generatedModule || {};
+  _postToCinema({
+    type: 'wispucci:lesson',
+    lesson: lesson,
+    moduleTitle: mod.title || state.topic || '',
+    topic: state.topic || mod.topic || '',
+    lessonIdx: lesson.index || 1,
+    moduleLessons: Array.isArray(mod.lessons) ? mod.lessons.length : 1
+  });
+}
+
+// Listen for messages back from the cinema iframe.
+window.addEventListener('message', (e) => {
+  const data = e && e.data;
+  if (!data || typeof data !== 'object') return;
+  if (data.type === 'wispucci:exit') {
+    showView('home');
+  } else if (data.type === 'wispucci:complete') {
+    // Treat as full module completion — same flow as the old celebrate.
+    if (typeof celebrate === 'function') {
+      try { celebrate(); } catch (_) { /* best-effort */ }
+    }
+    showView('home');
+  } else if (data.type === 'wispucci:ready') {
+    _cinemaFrameReady = true;
+    if (_cinemaPending) {
+      _postToCinema(_cinemaPending);
+      _cinemaPending = null;
+    }
+  }
+});
+
 // Render a backend lesson object into the lesson view's DOM so the
 // hardcoded demo content gets replaced by AI-generated content. Called
 // whenever state.currentLesson changes.
+//
+// NOTE: This function ALSO posts the lesson into the cinema iframe.
+// The legacy DOM updates below short-circuit (early `return`) because
+// `.lesson-card` no longer exists — the iframe replaced it. We keep
+// the function around so all existing callers (next/prev step, prefetch
+// resolution, etc.) keep working without modification.
 function applyLessonToView(lesson) {
   if (!lesson) return;
+  // Pipe the lesson into the cinema iframe.
+  _postLessonToCinema(lesson);
   const card = $('.view-lesson .lesson-card');
   if (!card) return;
 
