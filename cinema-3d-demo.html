@@ -38,8 +38,143 @@ body {
   pointer-events: none;
   display: grid;
   place-items: center;
+  transition: transform .6s cubic-bezier(.66,.04,.21,1.06), width .6s ease, height .6s ease;
 }
 .c3d-orb-host .orb { width: 100%; height: 100%; }
+
+/* In Act 2 (stage mode) the orb shrinks + moves to the RIGHT of the code stage */
+body.layout-stage .c3d-orb-host {
+  width: 220px;
+  height: 220px;
+  transform: translate(-50%, -50%) translate(260px, -10px);
+}
+@media (max-width: 900px) {
+  body.layout-stage .c3d-orb-host {
+    width: 140px; height: 140px;
+    transform: translate(-50%, -50%) translate(0, -240px);
+  }
+}
+
+/* ─── Orb emotions — SVG attributes are set in JS (setOrbEmotion) ─── */
+.orb .mouth        { transition: d .35s ease, stroke-width .25s ease; }
+.orb .face-eyes .eye { transition: ry .25s ease, cy .25s ease; }
+.orb .cheek        { transition: r .25s ease, opacity .25s ease, fill .25s ease; }
+.orb.is-wow .cheek   { opacity: 0.7 !important; fill: rgba(255, 182, 193, 0.5) !important; }
+.orb.is-celebrating .cheek { opacity: 0.85 !important; fill: rgba(255, 182, 193, 0.6) !important; }
+.orb.is-confused .face-eyes .eye-shine { opacity: 0; }
+.orb.is-wow .face-eyes { animation: orbEyeSparkle .9s ease-in-out infinite; }
+@keyframes orbEyeSparkle { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
+/* ─── Act 2 code stage (interactive for-loop demo) ─────────────────── */
+.c3d-stage {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  width: min(560px, 88vw);
+  /* sit centred with orb to its right */
+  transform: translate(-50%, -50%) translate(-180px, -10px);
+  background: rgba(33, 1, 36, 0.78);
+  border: 1px solid rgba(239, 221, 141, 0.32);
+  border-radius: 16px;
+  padding: 22px 26px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(239, 221, 141, 0.04) inset;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .55s ease, visibility .55s, transform .55s ease;
+}
+body.layout-stage .c3d-stage {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.c3d-stage-caption {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: clamp(20px, 2.6vw, 28px);
+  color: var(--accent-soft);
+  text-align: left;
+  line-height: 1.15;
+  min-height: 32px;
+  transition: opacity .35s ease;
+}
+.c3d-stage-caption em { color: var(--accent); }
+.c3d-stage-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(20px, 2.4vw, 26px);
+  line-height: 1.55;
+  color: var(--text);
+  background: rgba(20, 0, 22, 0.55);
+  border-radius: 10px;
+  padding: 16px 20px;
+  border-left: 3px solid var(--accent);
+}
+.c3d-stage-code .tok-kw  { color: #C792EA; }
+.c3d-stage-code .tok-fn  { color: var(--accent); }
+.c3d-stage-code .tok-var { color: #F4FDAF; }
+.c3d-stage-code .stage-n {
+  display: inline-block;
+  min-width: 1.3ch;
+  padding: 0 6px;
+  background: rgba(239, 221, 141, 0.16);
+  border: 1px solid rgba(239, 221, 141, 0.45);
+  border-radius: 5px;
+  color: var(--accent);
+  text-align: center;
+  transition: background .25s ease, transform .25s ease;
+}
+.c3d-stage-code .stage-n.is-bump { transform: scale(1.18); background: rgba(239, 221, 141, 0.32); }
+.c3d-stage-output {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(16px, 1.9vw, 20px);
+  color: var(--text-2);
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.c3d-stage-output .out-row {
+  opacity: 0;
+  transform: translateX(-10px);
+  color: var(--accent-soft);
+  transition: opacity .28s ease-out, transform .28s ease-out;
+}
+.c3d-stage-output .out-row.is-shown {
+  opacity: 1;
+  transform: translateX(0);
+}
+.c3d-stage-output .out-row.is-empty {
+  color: var(--text-3);
+  font-style: italic;
+  font-family: 'Instrument Serif', serif;
+  font-size: 18px;
+}
+.c3d-stage-hint {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  text-align: center;
+  opacity: 0.7;
+}
+
+/* In stage mode: hide the code block in the notes panel — code lives on stage */
+body.layout-stage .c3d-notes-block.is-code { display: none; }
+
+/* In stage mode: hide magazine-spread phrases (caption lives on the stage instead) */
+body.layout-stage .c3d-phrases { display: none; }
+
+/* In stage mode: notes panel becomes a slim right-side memory column */
+body.layout-stage .c3d-notes {
+  width: 240px;
+  justify-self: end;
+}
 
 /* ─── Overlay: magazine spread + notes + wayfinding ───────── */
 .c3d-overlay {
@@ -464,6 +599,17 @@ body {
   </div>
 </div>
 
+<!-- Act 2 code stage — interactive for-loop experiment -->
+<div class="c3d-stage" id="codeStage" aria-hidden="true">
+  <div class="c3d-stage-caption" id="stageCaption">Atinge un <em>număr</em> &mdash; vezi cum se mişcă <em>range(N)</em></div>
+  <div class="c3d-stage-code">
+    <span class="tok-kw">for</span> <span class="tok-var">i</span> <span class="tok-kw">in</span> <span class="tok-fn">range</span>(<span class="stage-n" id="stageN">5</span>):<br>
+        <span class="tok-fn">print</span>(<span class="tok-var">i</span>)
+  </div>
+  <div class="c3d-stage-output" id="stageOutput"></div>
+  <div class="c3d-stage-hint" id="stageHint">↓ alege N</div>
+</div>
+
 <!-- DOM overlay: magazine spread + wayfinding + notes -->
 <div class="c3d-overlay">
 
@@ -491,7 +637,7 @@ body {
       <ul class="c3d-memo" id="memoList"></ul>
     </section>
 
-    <section class="c3d-notes-block">
+    <section class="c3d-notes-block is-code">
       <h4>КОД</h4>
       <pre class="c3d-code" id="codeNotes"></pre>
     </section>
@@ -566,21 +712,46 @@ function setOrbState(state) {
 }
 setOrbState('thinking');
 
+// Orb emotions — morph the SVG mouth/eyes via attribute updates.
+//   neutral | confused | counting | wow | celebrating
+const ORB_EMOTIONS = {
+  neutral:     { mouth: 'M 40 65 Q 50 67 60 65',  mouthW: 3,   eyeRy: 5.4, cheekR: 3 },
+  confused:    { mouth: 'M 42 66 Q 50 63 58 66',  mouthW: 3,   eyeRy: 3.2, cheekR: 3 },
+  counting:    { mouth: 'M 42 64 Q 50 71 58 64',  mouthW: 3.4, eyeRy: 5.4, cheekR: 3.6 },
+  wow:         { mouth: 'M 36 62 Q 50 80 64 62',  mouthW: 4,   eyeRy: 6.6, cheekR: 5.5 },
+  celebrating: { mouth: 'M 34 60 Q 50 84 66 60',  mouthW: 4.2, eyeRy: 6.8, cheekR: 6 }
+};
+function setOrbEmotion(emotion) {
+  ['is-confused', 'is-counting', 'is-wow', 'is-celebrating'].forEach((c) => theOrb.classList.remove(c));
+  if (emotion && emotion !== 'neutral') theOrb.classList.add('is-' + emotion);
+  const cfg = ORB_EMOTIONS[emotion] || ORB_EMOTIONS.neutral;
+  const mouth = theOrb.querySelector('.mouth');
+  if (mouth) {
+    mouth.setAttribute('d', cfg.mouth);
+    mouth.setAttribute('stroke-width', cfg.mouthW);
+  }
+  theOrb.querySelectorAll('.face-eyes .eye').forEach((e) => e.setAttribute('ry', cfg.eyeRy));
+  theOrb.querySelectorAll('.cheek').forEach((c) => c.setAttribute('r', cfg.cheekR));
+}
+
 // ─────────────────────────────────────────────────────────────────────
-// 2.  Pacing helpers (no 3D — old morph stages become readable pauses)
+// 2.  Layout mode (Act 1/3 = magazine spread, Act 2 = focused stage)
 // ─────────────────────────────────────────────────────────────────────
-// All previous Three.js morph calls (setShape('infinity'), etc.) are kept
-// in the flow code as named pauses so each beat still has its own weight.
-// We just translate the morph duration → a sleep of the same length.
+function setLayoutMode(mode) {
+  document.body.classList.toggle('layout-stage',  mode === 'stage');
+  document.body.classList.toggle('layout-spread', mode === 'spread');
+}
+setLayoutMode('spread');
+
+// ─────────────────────────────────────────────────────────────────────
+// 3.  Pacing helpers (named pauses for each beat in the flow)
+// ─────────────────────────────────────────────────────────────────────
 function setShape(name, opts = {}) {
   const d = (opts.duration ?? 0.85) * 1000;
   return sleep(d);
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// 3.  Iterator tick (drives code-line highlight in Act 2)
-//     Cycles slot 0..4 at ~1.3 s per beat — reads like a running loop.
-// ─────────────────────────────────────────────────────────────────────
+// Iterator tick — keeps the notes-panel code line highlight moving in dev jumps.
 function onIteratorTick(callback) {
   let slot = -1;
   return setInterval(() => {
@@ -793,73 +964,143 @@ notesToggle.addEventListener('click', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// 11. Card task (Act 2 interaction).
+// 11. Act 2 interactive experiment — tap N, watch range(N) iterate.
 // ─────────────────────────────────────────────────────────────────────
 const taskArea   = $('taskArea');
 const taskPrompt = $('taskPrompt');
 const cardsGrid  = $('cardsGrid');
+const stageCaption = $('stageCaption');
+const stageN       = $('stageN');
+const stageOutput  = $('stageOutput');
+const stageHint    = $('stageHint');
 
-function runCards(opts) {
-  // Render and resolve when user picks all correct.
+function setStageCaption(html) {
+  gsap.to(stageCaption, {
+    opacity: 0, duration: 0.18, ease: 'power2.in',
+    onComplete: () => {
+      stageCaption.innerHTML = html;
+      gsap.fromTo(stageCaption, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.32, ease: 'power2.out' });
+    }
+  });
+}
+
+function setStageN(n) {
+  stageN.textContent = n;
+  stageN.classList.add('is-bump');
+  setTimeout(() => stageN.classList.remove('is-bump'), 280);
+}
+
+let iterToken = 0;
+function clearStageOutput() {
+  stageOutput.innerHTML = '';
+}
+
+async function runIteration(n) {
+  const myToken = ++iterToken;
+  setStageN(n);
+  clearStageOutput();
+
+  if (n === 0) {
+    setOrbEmotion('confused');
+    const empty = document.createElement('div');
+    empty.className = 'out-row is-empty';
+    empty.textContent = '(nimic — range(0) e gol)';
+    stageOutput.appendChild(empty);
+    void empty.offsetWidth;  // flush so CSS transition fires
+    empty.classList.add('is-shown');
+    await sleep(1100);
+    if (iterToken !== myToken) return;
+    setOrbEmotion('neutral');
+    return;
+  }
+
+  setOrbEmotion('counting');
+  for (let i = 0; i < n; i++) {
+    if (iterToken !== myToken) return;
+    const row = document.createElement('div');
+    row.className = 'out-row';
+    row.textContent = '> ' + i;
+    stageOutput.appendChild(row);
+    void row.offsetWidth;    // flush
+    row.classList.add('is-shown');
+    // tiny orb pulse per print
+    gsap.fromTo(theOrb, { scale: 1 }, { scale: 1.05, duration: 0.12, yoyo: true, repeat: 1, ease: 'sine.inOut' });
+    await sleep(360);
+  }
+  if (iterToken !== myToken) return;
+  // Hold the final emotion — user should be able to see it (it'll be cleared
+  // when they tap another card or when we transition to Act 3).
+  if (n >= 5)      setOrbEmotion('wow');
+  else if (n >= 3) setOrbEmotion('counting');
+  else             setOrbEmotion('counting');
+}
+
+const captionForN = {
+  0: '<em>0</em> &mdash; nimic. <em>range(0)</em> e gol.',
+  1: '<em>1</em> &mdash; o singură iterație.',
+  2: '<em>2</em> iterații: <em>0, 1</em>',
+  3: '<em>3</em> iterații. Vezi pattern-ul?',
+  4: '<em>4</em> iterații.',
+  5: '<em>5</em> &mdash; asta e <em>range(5)</em>.',
+  6: '<em>6</em> &mdash; șase. Tot pornește de la 0.',
+  7: '<em>7</em> &mdash; șapte! <em>Wow.</em>'
+};
+
+function runExperiment() {
   return new Promise((resolve) => {
-    taskPrompt.innerHTML = opts.prompt;
     cardsGrid.innerHTML = '';
-    const correctSet = new Set(opts.correct);
-    let captured = 0;
-    let mistakes = 0;
+    taskPrompt.innerHTML = '';
+    let taps = 0;
+    let hitFive = false;
+    const numbers = [0, 1, 2, 3, 4, 5, 6, 7];
 
-    const needed = correctSet.size;
-
-    const cardEls = opts.cards.map((n) => {
+    const cardEls = numbers.map((n) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'c3d-card';
       b.textContent = n;
       cardsGrid.appendChild(b);
-      b.addEventListener('click', () => {
-        if (b.classList.contains('is-correct') || b.classList.contains('is-flying')) return;
-        if (correctSet.has(n)) {
-          b.classList.add('is-correct');
-          captured++;
-          if (captured >= needed) {
-            setTimeout(() => resolve({ perfect: mistakes === 0, mistakes }), 540);
-          }
-        } else {
-          b.classList.add('is-wrong');
-          mistakes++;
-          setTimeout(() => b.classList.remove('is-wrong'), 380);
+      b.addEventListener('click', async () => {
+        taps++;
+        hidePointer();
+        // visual feedback on the card itself
+        b.classList.add('is-correct');
+        setTimeout(() => b.classList.remove('is-correct'), 700);
+
+        setStageCaption(captionForN[n] ?? ('range(' + n + ')'));
+        await runIteration(n);
+
+        if (n === 5 && !hitFive) {
+          hitFive = true;
+          stageHint.textContent = '↑ asta e!';
+          setTimeout(() => resolve({ perfect: true, taps }), 800);
+        } else if (taps >= 5 && !hitFive) {
+          // nudge user to try 5
+          showPointer(cardEls[5], '↓ încearcă 5');
         }
       });
       return b;
     });
 
-    gsap.fromTo(taskPrompt,
-      { opacity: 0, y: 16 },
-      { opacity: 1, y: 0, duration: 0.55, ease: 'expo.out' }
-    );
     gsap.fromTo(cardEls,
       { opacity: 0, y: 26, scale: 0.85 },
-      { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'back.out(1.7)', stagger: 0.05, delay: 0.15 }
+      { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'back.out(1.7)', stagger: 0.05, delay: 0.2 }
     );
 
-    // Wayfinding pointer to the first card after a beat.
-    setTimeout(() => showPointer(cardEls[1] || cardEls[0]), 700);
-    cardsGrid.addEventListener('click', hidePointer, { once: true });
+    // After ~3.5s of idle, gently nudge first card
+    setTimeout(() => {
+      if (taps === 0) showPointer(cardEls[3], '↓ atinge');
+    }, 3500);
   });
 }
 
-function hideCards() {
+function hideExperiment() {
   const cards = Array.from(cardsGrid.children);
   return new Promise((resolve) => {
-    gsap.to([taskPrompt, ...cards], {
-      opacity: 0,
-      y: -20,
-      duration: 0.35,
-      ease: 'power2.in',
-      stagger: 0.03,
+    gsap.to(cards, {
+      opacity: 0, y: -20, duration: 0.3, ease: 'power2.in', stagger: 0.025,
       onComplete: () => {
         cardsGrid.innerHTML = '';
-        taskPrompt.innerHTML = '';
         resolve();
       }
     });
@@ -887,110 +1128,72 @@ function hideAha() {
 // ─────────────────────────────────────────────────────────────────────
 // 13. Main flow — Python "Loops" lesson, 3 acts.
 // ─────────────────────────────────────────────────────────────────────
-let abortFlag = false;
+let flowGen = 0;            // any increment aborts the currently-running flow
 let tickWatcher = null;
+function stopActiveFlow() { flowGen++; iterToken++; }
 
 async function runLoopsFlow() {
-  abortFlag = false;
+  const myGen = ++flowGen;
+  const alive = () => myGen === flowGen;
   resetAll();
 
-  // ── Act 1 — Узнаём ──────────────────────────────────────────────
+  // ── Act 1 — Узнаём (magazine spread) ────────────────────────────
+  setLayoutMode('spread');
   setAct(1);
   setOrbState('thinking');
+  setOrbEmotion('neutral');
   showNotesPanel();
-  await sleep(900);
+  await sleep(700); if (!alive()) return;
 
   setOrbState('speaking');
   addPhrase({ html: '<em>Loops</em>?',        anchor: 'tl', size: 'xl', tilt: -3 });
-  await setShape('infinity', { duration: 1.0 });
-  await sleep(1200);
-  if (abortFlag) return;
+  await sleep(1100); if (!alive()) return;
 
   addPhrase({ html: 'Tema mea<br><em>preferată</em>.', anchor: 'c', size: 'l', tilt: 0 });
-  await setShape('heart', { duration: 1.0 });
   addMemo('Cikluri = ритм повторения');
-  await sleep(1500);
-  if (abortFlag) return;
+  await sleep(1300); if (!alive()) return;
 
   addPhrase({ html: 'Uite.', anchor: 'br', size: 'l', tilt: 5 });
-  await setShape('arrow', { duration: 0.9 });
-  await sleep(1200);
-  if (abortFlag) return;
+  await sleep(1100); if (!alive()) return;
 
-  // Transition to Act 2: collapse phrases, reveal window scene.
-  await clearPhrases();
+  // ── Transition to Act 2 (focused stage) ─────────────────────────
+  await clearPhrases(); if (!alive()) return;
   setAct(2);
-
-  // ── Act 2 — Твой ход (code + running iterator highlight) ────────
-  setOrbState('speaking');
-  await setShape('range', { duration: 1.0 });
-
-  // Type code into notes panel line by line.
-  for (let i = 0; i < codeLines.length; i++) {
-    typeCodeLines(i);
-    await sleep(260);
-    if (abortFlag) return;
-  }
-
-  addGlossary('range(a,b)', '— числа от a до b−1');
-  addPhrase({ html: 'Asta e <em>range</em>.', anchor: 't',  size: 'm', tilt: 0 });
-  await sleep(1400);
-  addPhrase({ html: 'De la <em>1</em>...',    anchor: 'tl', size: 'm', tilt: -2 });
-  await sleep(1200);
-  addPhrase({ html: '... până la <em>6</em>.', anchor: 'br', size: 'm', tilt: 3 });
-  await sleep(1300);
-  addPhrase({ html: 'Dar <em>6 NU intră</em>.', anchor: 'c', size: 'l', tilt: 0 });
-  addMemo('range(1,6) → последнее <b>не включается</b>');
-  await sleep(1600);
-  if (abortFlag) return;
-
-  // Start iterator orbit "tick" → highlight comment lines 3..7 in sync.
-  if (tickWatcher) clearInterval(tickWatcher);
-  tickWatcher = onIteratorTick((slot) => {
-    // slot 0..4 → comment lines 3..7
-    highlightRunningLine(3 + slot);
-  });
-
-  // Cards interaction.
-  await clearPhrases();
-  await sleep(400);
+  setLayoutMode('stage');
   setOrbState('listening');
-  await setShape('sphere', { duration: 0.8 });
-  addPhrase({ html: 'Acum tu.', anchor: 'tl', size: 'l', tilt: -2 });
-  await sleep(700);
+  setOrbEmotion('neutral');
+  addGlossary('range(N)', '— числа от 0 до N−1');
+  await sleep(550); if (!alive()) return;
 
-  const result = await runCards({
-    prompt: 'Atinge numerele din <code>range(1, 6)</code>',
-    cards:  [0, 1, 2, 3, 4, 5, 6, 7],
-    correct: [1, 2, 3, 4, 5]
-  });
+  // ── Act 2 — Tu controlezi: tap N, watch range(N) iterate ────────
+  setStageCaption('Atinge un <em>număr</em> — vezi cum se mişcă <em>range(N)</em>');
+  setStageN(5);
+  clearStageOutput();
+  for (let i = 0; i < codeLines.length; i++) typeCodeLines(i);
+
+  // Wait for the user to pick N=5 (or run a few tries first).
+  const result = await runExperiment();
   hidePointer();
-  if (abortFlag) return;
+  if (!alive()) return;
 
-  await clearPhrases();
-  await hideCards();
-
-  // ── Act 3 — AHA ──────────────────────────────────────────────────
+  // ── Transition to Act 3 (back to magazine spread) ───────────────
+  await hideExperiment(); if (!alive()) return;
+  await sleep(280); if (!alive()) return;
+  setLayoutMode('spread');
   setAct(3);
   setOrbState('celebrating');
+  setOrbEmotion('celebrating');
 
-  if (result.perfect) {
-    addPhrase({ html: '<em>Perfect.</em>',         anchor: 'tl', size: 'xl', tilt: -4 });
-    addPhrase({ html: '6 rămâne <em>afară</em>.',  anchor: 'br', size: 'l',  tilt: 4 });
-  } else {
-    addPhrase({ html: 'Aproape.',                  anchor: 'tl', size: 'xl', tilt: -4 });
-    addPhrase({ html: '6 rămâne <em>afară</em>.',  anchor: 'br', size: 'l',  tilt: 4 });
-  }
-  addMemo('aha: range(1,6) = [1, 2, 3, 4, 5]');
+  addPhrase({ html: '<em>Perfect.</em>',         anchor: 'tl', size: 'xl', tilt: -4 });
+  addPhrase({ html: 'Acum şti <em>range(N)</em>.',  anchor: 'br', size: 'l',  tilt: 4 });
+  addMemo('aha: range(N) = [0, 1, …, N−1]');
 
-  await setShape('lightbulb', { duration: 1.0 });
-  await sleep(700);
-  await setShape('explode', { duration: 0.9, ease: 'expo.out' });
+  await sleep(900); if (!alive()) return;
   showAha();
-  await sleep(2200);
-  await setShape('sphere', { duration: 1.2, ease: 'expo.out' });
+  await sleep(2200); if (!alive()) return;
   setOrbState('thinking');
-  await sleep(1700);
+  setOrbEmotion('neutral');
+  await sleep(1500); if (!alive()) return;
   hideAha();
   if (tickWatcher) { clearInterval(tickWatcher); tickWatcher = null; }
 }
@@ -1001,75 +1204,79 @@ async function runLoopsFlow() {
 function resetAll() {
   // Stop any tick watcher.
   if (tickWatcher) { clearInterval(tickWatcher); tickWatcher = null; }
+  // Abort any pending iteration animation.
+  iterToken++;
   // Clear phrases.
   livePhrases.length = 0;
   phrasesHost.innerHTML = '';
   // Hide aha.
   ahaOverlay.style.opacity = '0';
-  // Clear task.
+  // Clear task + stage.
   cardsGrid.innerHTML = '';
   taskPrompt.innerHTML = '';
+  clearStageOutput();
+  setStageN(5);
+  stageCaption.innerHTML = 'Atinge un <em>număr</em> — vezi cum se mişcă <em>range(N)</em>';
+  stageHint.textContent = '↓ alege N';
   // Reset notes.
   memoList.innerHTML = '';
   glosList.innerHTML = '';
   renderCode();
+  // Reset orb + layout.
   setOrbState('thinking');
+  setOrbEmotion('neutral');
+  setLayoutMode('spread');
   setAct(1);
   hidePointer();
 }
 
 document.querySelectorAll('.c3d-dev [data-jump]').forEach((btn) => {
   btn.addEventListener('click', async () => {
-    abortFlag = true;       // signal current loop to stop
+    stopActiveFlow();       // invalidate any in-flight flow (auto-flow + nested awaits)
     await sleep(80);
-    abortFlag = false;
     const j = +btn.dataset.jump;
     resetAll();
     showNotesPanel();
     if (j === 1) {
       runLoopsFlow();
     } else if (j === 2) {
-      // Jump to act 2 — code + range
+      // Jump to Act 2 — interactive stage
       setAct(2);
-      setOrbState('speaking');
-      for (let i = 0; i < codeLines.length; i++) typeCodeLines(i);
-      if (tickWatcher) clearInterval(tickWatcher);
-      tickWatcher = onIteratorTick((slot) => highlightRunningLine(3 + slot));
-      addPhrase({ html: 'Asta e <em>range</em>.', anchor: 't', size: 'm' });
-      addMemo('range(1,6) → последнее <b>не включается</b>');
-    } else if (j === 3) {
-      // Jump to act 2 cards
-      setAct(2);
-      await setShape('sphere', { duration: 0.4 });
+      setLayoutMode('stage');
       setOrbState('listening');
-      const result = await runCards({
-        prompt: 'Atinge numerele din <code>range(1, 6)</code>',
-        cards:  [0, 1, 2, 3, 4, 5, 6, 7],
-        correct: [1, 2, 3, 4, 5]
-      });
-      hidePointer();
+      addGlossary('range(N)', '— числа от 0 до N−1');
+      for (let i = 0; i < codeLines.length; i++) typeCodeLines(i);
+      setStageCaption('Atinge un <em>număr</em> — vezi cum se mişcă <em>range(N)</em>');
+      runExperiment().then(() => hidePointer());
+    } else if (j === 3) {
+      // Jump to Act 2 with a pre-run example (N=5)
+      setAct(2);
+      setLayoutMode('stage');
+      setOrbState('listening');
+      addGlossary('range(N)', '— числа от 0 до N−1');
+      for (let i = 0; i < codeLines.length; i++) typeCodeLines(i);
+      setStageCaption('<em>5</em> — asta e <em>range(5)</em>.');
+      await sleep(400);
+      await runIteration(5);
+      runExperiment().then(() => hidePointer());
     } else if (j === 4) {
-      // Jump to aha
+      // Jump to Act 3 — aha
       setAct(3);
+      setLayoutMode('spread');
       setOrbState('celebrating');
+      setOrbEmotion('celebrating');
       addPhrase({ html: '<em>Perfect.</em>',        anchor: 'tl', size: 'xl', tilt: -4 });
-      addPhrase({ html: '6 rămâne <em>afară</em>.', anchor: 'br', size: 'l',  tilt: 4 });
-      await setShape('lightbulb', { duration: 0.6 });
-      await sleep(350);
-      await setShape('explode', { duration: 0.6 });
+      addPhrase({ html: 'Acum şti <em>range(N)</em>.', anchor: 'br', size: 'l', tilt: 4 });
+      await sleep(500);
       showAha();
-      await sleep(900);
-      await setShape('sphere', { duration: 1.0 });
-      setOrbState('thinking');
     }
   });
 });
 
 $('replay').addEventListener('click', async () => {
-  abortFlag = true;
+  stopActiveFlow();
   await sleep(80);
   hideAha();
-  abortFlag = false;
   resetAll();
   showNotesPanel();
   runLoopsFlow();
