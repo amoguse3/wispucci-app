@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Wispucci — Practică (Comic preview)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Patrick+Hand&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #FFF4DE;
+      --ink: #1a1a1a;
+      --coral: #FF6B6B;
+      --teal: #4ECDC4;
+      --sun: #FFE066;
+      --rose: #FFB5A7;
+      --lime: #B6E388;
+      --halftone: rgba(0, 0, 0, 0.07);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100vh; overflow-x: hidden; }
+    body {
+      font-family: 'Patrick Hand', cursive;
+      background: var(--paper);
+      background-image: radial-gradient(var(--halftone) 1.5px, transparent 1.5px);
+      background-size: 14px 14px;
+      color: var(--ink);
+      padding: 28px 24px 80px;
+      min-height: 100vh;
+      position: relative;
+    }
+
+    /* ── HEADER (title + score) ─────────────────────────────── */
+    .comic-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      max-width: 960px;
+      margin: 0 auto 28px;
+      flex-wrap: wrap;
+    }
+    .comic-title {
+      font-family: 'Bungee', sans-serif;
+      font-size: 52px;
+      color: var(--coral);
+      text-shadow: 4px 4px 0 var(--ink);
+      letter-spacing: 3px;
+      line-height: 1;
+      transform: rotate(-2deg);
+    }
+    .comic-stars {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-family: 'Bungee', sans-serif;
+      font-size: 14px;
+      letter-spacing: 2px;
+      color: var(--ink);
+    }
+    .comic-stars .label { opacity: 0.6; }
+    .comic-star {
+      width: 30px; height: 30px;
+      display: inline-block;
+      background: transparent;
+      position: relative;
+      transition: transform .35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .comic-star::before {
+      content: '★';
+      font-size: 32px;
+      color: var(--ink);
+      opacity: 0.18;
+      line-height: 1;
+    }
+    .comic-star.full::before, .comic-star.half::before {
+      color: var(--sun);
+      opacity: 1;
+      text-shadow: 2px 2px 0 var(--ink);
+    }
+    .comic-star.full { animation: starPop .55s ease; }
+    .comic-star.half::before { opacity: 0.55; }
+    @keyframes starPop {
+      0% { transform: scale(0.4) rotate(-20deg); }
+      55% { transform: scale(1.45) rotate(10deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+
+    /* ── MAIN QUESTION PANEL ───────────────────────────────── */
+    .panel {
+      max-width: 960px;
+      margin: 0 auto;
+      border: 4px solid var(--ink);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 10px 10px 0 var(--ink);
+      padding: 30px 32px 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .panel::before {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border: 2px dashed rgba(0,0,0,0.08);
+      border-radius: 8px;
+      pointer-events: none;
+    }
+    .question-row {
+      display: grid;
+      grid-template-columns: 1fr 200px;
+      gap: 28px;
+      align-items: start;
+      position: relative;
+      z-index: 1;
+    }
+    .q-left { min-width: 0; }
+    .bubble {
+      position: relative;
+      background: var(--sun);
+      border: 3px solid var(--ink);
+      border-radius: 22px;
+      padding: 16px 22px 18px;
+      font-size: 26px;
+      line-height: 1.25;
+      box-shadow: 5px 5px 0 var(--ink);
+    }
+    .bubble::after {
+      content: '';
+      position: absolute;
+      right: -22px;
+      top: 38px;
+      width: 36px;
+      height: 22px;
+      background: var(--sun);
+      border-right: 3px solid var(--ink);
+      border-bottom: 3px solid var(--ink);
+      transform: skew(-18deg) rotate(10deg);
+    }
+    .q-tag {
+      font-family: 'Bungee', sans-serif;
+      font-size: 11px;
+      color: var(--coral);
+      letter-spacing: 3px;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .q-prompt em { font-style: italic; color: var(--coral); }
+
+    .code-clip {
+      margin-top: 24px;
+      background: var(--ink);
+      color: var(--paper);
+      padding: 18px 22px;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 17px;
+      line-height: 1.5;
+      transform: rotate(-1deg);
+      box-shadow: 5px 5px 0 rgba(0,0,0,0.18);
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .code-clip .kw { color: var(--rose); }
+    .code-clip .fn { color: var(--sun); }
+    .code-clip .num { color: var(--teal); }
+
+    /* ── ORB AS COMIC CHARACTER ─────────────────────────────── */
+    .orb-char {
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 28%, #FFF1A6 0%, #FFD24F 55%, #E69900 100%);
+      border: 4px solid var(--ink);
+      position: relative;
+      margin-top: 6px;
+      box-shadow: 6px 6px 0 var(--ink);
+      transition: transform .3s, box-shadow .3s;
+    }
+    .orb-char.wow { animation: orbBounce 0.7s ease; }
+    .orb-char.confused { animation: orbWobble 0.5s ease; }
+    @keyframes orbBounce {
+      0% { transform: translateY(0) scale(1); }
+      45% { transform: translateY(-22px) scale(1.07); }
+      100% { transform: translateY(0) scale(1); }
+    }
+    @keyframes orbWobble {
+      0%, 100% { transform: rotate(0); }
+      25% { transform: rotate(-8deg); }
+      75% { transform: rotate(8deg); }
+    }
+    .orb-char .eyes {
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 32px;
+    }
+    .orb-char .eye {
+      width: 14px;
+      height: 16px;
+      background: var(--ink);
+      border-radius: 50%;
+    }
+    .orb-char.confused .eyes .eye {
+      transform: rotate(-15deg);
+      border-radius: 30%;
+    }
+    .orb-char .mouth {
+      position: absolute;
+      bottom: 50px;
+      left: 50%;
+      width: 54px;
+      height: 24px;
+      border: 4px solid var(--ink);
+      border-top: none;
+      border-radius: 0 0 50px 50px;
+      transform: translateX(-50%);
+      background: white;
+    }
+    .orb-char.wow .mouth {
+      width: 34px;
+      height: 42px;
+      border-radius: 50%;
+      border: 4px solid var(--ink);
+      background: var(--coral);
+      bottom: 46px;
+    }
+    .orb-char.confused .mouth {
+      border-radius: 50px 50px 0 0;
+      border: 4px solid var(--ink);
+      border-bottom: none;
+      bottom: 42px;
+      height: 18px;
+    }
+    .orb-char .cheek {
+      position: absolute;
+      top: 90px;
+      width: 14px; height: 8px;
+      background: var(--coral);
+      opacity: 0.55;
+      border-radius: 50%;
+    }
+    .orb-char .cheek.l { left: 32px; }
+    .orb-char .cheek.r { right: 32px; }
+
+    /* ── ANSWER CARDS ───────────────────────────────────────── */
+    .answers {
+      max-width: 960px;
+      margin: 28px auto 0;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .answer-btn {
+      background: white;
+      border: 4px solid var(--ink);
+      border-radius: 14px;
+      padding: 24px 16px;
+      box-shadow: 7px 7px 0 var(--ink);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: 0.5px;
+      color: var(--ink);
+      transition: transform .12s ease, box-shadow .12s ease, background .25s, opacity .3s;
+      position: relative;
+      text-align: center;
+    }
+    .answer-btn:nth-child(1) { background: var(--rose); }
+    .answer-btn:nth-child(2) { background: var(--teal); }
+    .answer-btn:nth-child(3) { background: var(--sun); }
+    .answer-btn:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 9px 9px 0 var(--ink);
+    }
+    .answer-btn:active {
+      transform: translate(4px, 4px);
+      box-shadow: 3px 3px 0 var(--ink);
+    }
+    .answer-btn.correct {
+      background: var(--lime) !important;
+      animation: correctFlash 0.6s ease;
+    }
+    .answer-btn.wrong {
+      animation: wrongShake 0.45s ease;
+      opacity: 0.45;
+      pointer-events: none;
+    }
+    @keyframes correctFlash {
+      0%, 100% { transform: scale(1); }
+      40% { transform: scale(1.1) rotate(-3deg); }
+      70% { transform: scale(1.05) rotate(2deg); }
+    }
+    @keyframes wrongShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-8px) rotate(-2deg); }
+      50% { transform: translateX(8px) rotate(2deg); }
+      75% { transform: translateX(-4px); }
+    }
+
+    /* ── STICKERS (BOOM / OOPS / AHA) ────────────────────────── */
+    .sticker {
+      position: fixed;
+      font-family: 'Bungee', sans-serif;
+      font-size: 90px;
+      color: var(--coral);
+      text-shadow: 6px 6px 0 var(--ink);
+      pointer-events: none;
+      transform: scale(0) rotate(-20deg);
+      opacity: 0;
+      transition: transform .55s cubic-bezier(0.34, 1.56, 0.64, 1), opacity .45s;
+      z-index: 30;
+      white-space: nowrap;
+    }
+    .sticker.show { transform: scale(1) rotate(-10deg); opacity: 1; }
+
+    /* ── FINALE OVERLAY ─────────────────────────────────────── */
+    .finale-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--paper);
+      background-image: radial-gradient(var(--halftone) 1.5px, transparent 1.5px);
+      background-size: 14px 14px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 22px;
+      z-index: 60;
+      padding: 24px;
+    }
+    .finale-overlay.show {
+      display: flex;
+      animation: finaleDrop 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes finaleDrop {
+      0% { opacity: 0; transform: translateY(-60px) scale(0.8); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .finale-tag {
+      font-family: 'Bungee', sans-serif;
+      font-size: 14px;
+      letter-spacing: 4px;
+      color: var(--ink);
+      opacity: 0.55;
+    }
+    .finale-title {
+      font-family: 'Bungee', sans-serif;
+      font-size: clamp(58px, 12vw, 120px);
+      color: var(--coral);
+      text-shadow: 8px 8px 0 var(--ink);
+      letter-spacing: 4px;
+      transform: rotate(-3deg);
+      text-align: center;
+      line-height: 1;
+    }
+    .finale-sub {
+      font-size: 26px;
+      color: var(--ink);
+      text-align: center;
+      max-width: 560px;
+    }
+    .finale-actions {
+      display: flex;
+      gap: 14px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .finale-btn {
+      font-family: 'Bungee', sans-serif;
+      font-size: 14px;
+      padding: 16px 28px;
+      border: 4px solid var(--ink);
+      background: white;
+      box-shadow: 6px 6px 0 var(--ink);
+      cursor: pointer;
+      letter-spacing: 2px;
+      color: var(--ink);
+      transition: transform .12s, box-shadow .12s;
+    }
+    .finale-btn:hover { transform: translate(-2px,-2px); box-shadow: 8px 8px 0 var(--ink); }
+    .finale-btn:active { transform: translate(3px,3px); box-shadow: 3px 3px 0 var(--ink); }
+    .finale-btn.primary { background: var(--sun); }
+
+    /* ── DECORATIVE BACKGROUND DOODLES ───────────────────────── */
+    .doodle {
+      position: absolute;
+      font-family: 'Bungee', sans-serif;
+      color: rgba(0,0,0,0.06);
+      pointer-events: none;
+      user-select: none;
+    }
+    .doodle.d1 { top: 60px; left: -30px; font-size: 80px; transform: rotate(-15deg); }
+    .doodle.d2 { bottom: 100px; right: -20px; font-size: 70px; transform: rotate(10deg); }
+    .doodle.d3 { top: 50%; right: 8%; font-size: 50px; transform: rotate(-25deg); }
+
+    /* ── HINT BANNER (shown after wrong) ─────────────────────── */
+    .hint-strip {
+      max-width: 960px;
+      margin: 18px auto 0;
+      padding: 14px 22px;
+      border: 3px dashed var(--coral);
+      border-radius: 10px;
+      background: rgba(255, 107, 107, 0.08);
+      font-size: 22px;
+      color: var(--ink);
+      display: none;
+      transform: rotate(-0.5deg);
+    }
+    .hint-strip.show {
+      display: block;
+      animation: hintIn 0.4s ease;
+    }
+    @keyframes hintIn {
+      0% { opacity: 0; transform: rotate(-2deg) translateY(-6px); }
+      100% { opacity: 1; transform: rotate(-0.5deg) translateY(0); }
+    }
+    .hint-strip em { color: var(--coral); font-style: italic; }
+    .hint-strip code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      background: var(--ink);
+      color: var(--sun);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    /* ── RESPONSIVE ─────────────────────────────────────────── */
+    @media (max-width: 720px) {
+      body { padding: 18px 14px 60px; }
+      .comic-title { font-size: 36px; }
+      .question-row { grid-template-columns: 1fr; }
+      .orb-char { width: 130px; height: 130px; margin: 0 auto; }
+      .orb-char .eyes { top: 44px; gap: 24px; }
+      .orb-char .mouth { bottom: 36px; width: 40px; height: 18px; }
+      .answers { grid-template-columns: 1fr; gap: 14px; }
+      .panel { padding: 22px 18px; box-shadow: 6px 6px 0 var(--ink); }
+      .bubble { font-size: 22px; }
+      .bubble::after { display: none; }
+      .doodle { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="doodle d1">POW!</div>
+  <div class="doodle d2">range()</div>
+  <div class="doodle d3">★</div>
+
+  <header class="comic-header">
+    <div class="comic-title">PRACTICA</div>
+    <div class="comic-stars">
+      <span class="label">SCOR</span>
+      <span class="comic-star" data-i="0"></span>
+      <span class="comic-star" data-i="1"></span>
+      <span class="comic-star" data-i="2"></span>
+      <span class="comic-star" data-i="3"></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel" id="panel">
+      <div class="question-row">
+        <div class="q-left">
+          <div class="bubble">
+            <span class="q-tag" id="qTag">ÎNTREBAREA 1 / 4</span>
+            <span class="q-prompt" id="qPrompt">Ce afișează?</span>
+          </div>
+          <pre class="code-clip" id="qCode"></pre>
+        </div>
+        <div class="orb-char" id="orb" aria-hidden="true">
+          <div class="cheek l"></div>
+          <div class="cheek r"></div>
+          <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+          <div class="mouth"></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="hint-strip" id="hint"></div>
+
+    <div class="answers" id="answers"></div>
+  </main>
+
+  <div class="sticker" id="sticker">BOOM!</div>
+
+  <div class="finale-overlay" id="finale" role="dialog" aria-modal="true" aria-label="Rezultat">
+    <div class="finale-tag" id="finaleTag">SCOR · 4/4</div>
+    <div class="finale-title" id="finaleTitle">MAESTRU!</div>
+    <div class="finale-sub" id="finaleSub">Ai înțeles range. Acum știi loops.</div>
+    <div class="finale-actions">
+      <button class="finale-btn" id="restartBtn">↺ ÎNCĂ O DATĂ</button>
+      <button class="finale-btn primary" id="closeBtn">GATA</button>
+    </div>
+  </div>
+
+  <script>
+    const PRACTICA = [
+      {
+        code: 'for i in range(4):\n    print(i)',
+        prompt: 'Ce afișează?',
+        answers: ['0, 1, 2, 3', '1, 2, 3, 4', '0, 1, 2, 3, 4'],
+        correct: 0,
+        hint: '<em>range(N)</em> începe de la <em>0</em> și se oprește <em>înainte</em> de N. Deci pentru <code>range(4)</code> → <code>0, 1, 2, 3</code>.'
+      },
+      {
+        code: 'for i in range(2, 5):\n    print(i)',
+        prompt: 'Două argumente. Ce afișează?',
+        answers: ['2, 3, 4', '2, 3, 4, 5', '0, 1, 2, 3, 4'],
+        correct: 0,
+        hint: 'Start <em>inclus</em> (2), stop <em>exclus</em> (5). Așa că ai <code>2, 3, 4</code>.'
+      },
+      {
+        code: 'for i in range(0, 10, 3):\n    print(i)',
+        prompt: 'Cu step. Ce afișează?',
+        answers: ['0, 3, 6, 9', '0, 3, 6', '3, 6, 9'],
+        correct: 0,
+        hint: '<em>step</em> = 3 → sare câte 3, <em>înainte</em> de 10. Deci <code>0, 3, 6, 9</code>.'
+      },
+      {
+        code: 'for i in range(5, 5):\n    print(i)',
+        prompt: 'Atenție, capcană. Ce afișează?',
+        answers: ['nimic — gol', '5', '0, 1, 2, 3, 4'],
+        correct: 0,
+        hint: 'Dacă <em>start == stop</em>, bucla nu rulează deloc. Gol.'
+      }
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    const STAR_EMPTY = '★';
+    let qIdx = 0;
+    let scores = [];
+    let attempts = 0;
+    let lockInput = false;
+
+    function pyHighlight(src) {
+      const esc = src
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return esc
+        .replace(/\b(for|in)\b/g, '<span class="kw">$1</span>')
+        .replace(/\b(range|print)\b/g, '<span class="fn">$1</span>')
+        .replace(/\b(\d+)\b/g, '<span class="num">$1</span>');
+    }
+
+    function setOrb(state) {
+      const orb = $('orb');
+      orb.classList.remove('wow', 'confused');
+      if (state) orb.classList.add(state);
+    }
+
+    function showSticker(text, color) {
+      const s = $('sticker');
+      s.textContent = text;
+      s.style.color = color || 'var(--coral)';
+      // random-ish position around the panel area
+      const x = 30 + Math.random() * 40;
+      const y = 28 + Math.random() * 36;
+      s.style.left = `${x}%`;
+      s.style.top = `${y}%`;
+      // re-trigger animation
+      s.classList.remove('show');
+      void s.offsetWidth;
+      s.classList.add('show');
+      setTimeout(() => s.classList.remove('show'), 1100);
+    }
+
+    function updateStar(idx, type) {
+      scores[idx] = type;
+      const star = document.querySelector(`.comic-star[data-i="${idx}"]`);
+      if (!star) return;
+      star.classList.remove('full', 'half');
+      if (type === 'full' || type === 'half') star.classList.add(type);
+    }
+
+    function showHint(html) {
+      const h = $('hint');
+      h.innerHTML = html;
+      h.classList.add('show');
+    }
+    function clearHint() {
+      const h = $('hint');
+      h.classList.remove('show');
+      h.innerHTML = '';
+    }
+
+    function renderQuestion() {
+      lockInput = false;
+      attempts = 0;
+      clearHint();
+      const q = PRACTICA[qIdx];
+      $('qTag').textContent = `ÎNTREBAREA ${qIdx + 1} / ${PRACTICA.length}`;
+      $('qPrompt').textContent = q.prompt;
+      $('qCode').innerHTML = pyHighlight(q.code);
+      setOrb(null);
+
+      const grid = $('answers');
+      grid.innerHTML = '';
+      q.answers.forEach((text, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'answer-btn';
+        btn.type = 'button';
+        btn.textContent = text;
+        btn.addEventListener('click', () => handleAnswer(i, btn));
+        grid.appendChild(btn);
+      });
+    }
+
+    function handleAnswer(choice, btn) {
+      if (lockInput) return;
+      if (btn.classList.contains('correct') || btn.classList.contains('wrong')) return;
+      attempts++;
+      const q = PRACTICA[qIdx];
+
+      if (choice === q.correct) {
+        lockInput = true;
+        btn.classList.add('correct');
+        setOrb('wow');
+        showSticker(attempts === 1 ? 'BOOM!' : 'AHA!', 'var(--coral)');
+        updateStar(qIdx, attempts === 1 ? 'full' : 'half');
+        setTimeout(nextQuestion, 1150);
+        return;
+      }
+
+      // wrong
+      btn.classList.add('wrong');
+      setOrb('confused');
+      if (attempts === 1) {
+        showSticker('OOPS!', 'var(--teal)');
+        showHint(`<em>Atenție:</em> ${q.hint}`);
+      } else {
+        // reveal correct, half star
+        lockInput = true;
+        const correctBtn = $('answers').children[q.correct];
+        correctBtn.classList.add('correct');
+        showSticker('AHA!', 'var(--sun)');
+        updateStar(qIdx, 'half');
+        showHint(`Răspuns: <em>${q.answers[q.correct]}</em>. ${q.hint}`);
+        setTimeout(nextQuestion, 1500);
+      }
+    }
+
+    function fullCount() {
+      return scores.filter((s) => s === 'full').length;
+    }
+
+    function nextQuestion() {
+      qIdx++;
+      if (qIdx >= PRACTICA.length) {
+        showFinale();
+      } else {
+        renderQuestion();
+      }
+    }
+
+    function showFinale() {
+      const stars = fullCount();
+      let title;
+      let sub;
+      if (stars >= 4) {
+        title = 'MAESTRU!';
+        sub = 'Ai înțeles range. Acum știi loops.';
+      } else if (stars === 3) {
+        title = 'BUN!';
+        sub = 'Aproape perfect. Un mic ajustment și ești acolo.';
+      } else if (stars === 2) {
+        title = 'OK!';
+        sub = 'Două complete, două aproape. Mai vezi o dată mostrele și încearcă.';
+      } else {
+        title = 'INCEARCĂ!';
+        sub = 'Hai înapoi la mostre — o privire calmă și totul se așază.';
+      }
+      $('finaleTag').textContent = `SCOR · ${stars}/${PRACTICA.length}`;
+      $('finaleTitle').textContent = title;
+      $('finaleSub').textContent = sub;
+      $('finale').classList.add('show');
+    }
+
+    function restart() {
+      qIdx = 0;
+      scores = [];
+      document.querySelectorAll('.comic-star').forEach((s) => s.classList.remove('full', 'half'));
+      $('finale').classList.remove('show');
+      renderQuestion();
+    }
+
+    $('restartBtn').addEventListener('click', restart);
+    $('closeBtn').addEventListener('click', () => $('finale').classList.remove('show'));
+
+    renderQuestion();
+  </script>
+</body>
+</html>
